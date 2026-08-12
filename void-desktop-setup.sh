@@ -162,37 +162,40 @@ else
 fi
 
 # ============================================
-# 3. SELECCIÓN DE SHELLS
+# 3. SELECCIÓN DE SHELLS (REPOS OFICIALES)
 # ============================================
 echo -e "${YELLOW}[3/8] Select shells to install / Selecciona shells a instalar:${NC}"
 echo ""
 echo "  1) Niri + Noctalia (recommended / recomendado)"
-echo "  2) Hyprland + Noctalia"
-echo "  3) Sway"
-echo "  4) KDE Plasma (Wayland)"
-echo "  5) Multiple / Múltiples (select all you want)"
+echo "  2) Sway (Wayland compositor)"
+echo "  3) KDE Plasma (Wayland)"
+echo "  4) Multiple / Múltiples (select all you want)"
 echo ""
-echo -e "${YELLOW}Enter numbers separated by space (e.g. 1 3 5):${NC}"
-echo -e "${YELLOW}Introduce números separados por espacio (ej. 1 3 5):${NC}"
+echo -e "${YELLOW}Enter numbers separated by space (e.g. 1 3 4):${NC}"
+echo -e "${YELLOW}Introduce números separados por espacio (ej. 1 3 4):${NC}"
 read -r -a shell_selection
 
 echo "  Installing shells / Instalando shells..."
 for selection in "${shell_selection[@]}"; do
     case $selection in
         1)
+            echo -e "  ${GREEN}→ Installing Niri + Noctalia (official Void repos)${NC}"
             xbps-install -S -y niri noctalia
             ;;
         2)
-            xbps-install -S -y hyprland noctalia waybar
-            ;;
-        3)
+            echo -e "  ${GREEN}→ Installing Sway (official Void repos)${NC}"
             xbps-install -S -y sway swaybg swaylock swaybar
             ;;
-        4)
+        3)
+            echo -e "  ${GREEN}→ Installing KDE Plasma (official Void repos)${NC}"
             xbps-install -S -y kde-plasma-desktop
             ;;
-        5)
-            xbps-install -S -y niri noctalia hyprland sway kde-plasma-desktop
+        4)
+            echo -e "  ${GREEN}→ Installing all available shells (official repos)${NC}"
+            xbps-install -S -y niri noctalia sway kde-plasma-desktop
+            ;;
+        *)
+            echo -e "  ${YELLOW}→ Skipping invalid option / Opción inválida${NC}"
             ;;
     esac
 done
@@ -201,7 +204,6 @@ echo ""
 echo -e "${BLUE}ℹ️  All installed shells will be available in Noctalia Greeter${NC}"
 echo -e "${BLUE}ℹ️  Todas las shells instaladas estarán disponibles en Noctalia Greeter${NC}"
 echo ""
-
 # ============================================
 # 4. INSTALAR GREETD + NOCTALIA GREETER
 # ============================================
