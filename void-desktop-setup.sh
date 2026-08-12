@@ -3,10 +3,11 @@
 # Void Linux - Minimal Desktop Setup / Setup Minimalista de Escritorio
 #
 # Usage / Uso:
-#   curl -sL https://raw.githubusercontent.com/TU_USUARIO/void-desktop-setup/main/void-desktop-setup.sh | sudo bash
-#
-# Repository / Repositorio:
-#   https://github.com/TU_USUARIO/void-desktop-setup
+#   curl -sL https://raw.githubusercontent.com/SirOtter0/void-desktop-setup/main/void-desktop-setup.sh | sudo bash
+#   o bien:
+#   git clone https://github.com/SirOtter0/void-desktop-setup.git
+#   cd void-desktop-setup
+#   sudo ./void-desktop-setup.sh
 
 set -e
 
@@ -14,7 +15,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║        Void Linux - Desktop Setup / Setup             ║${NC}"
@@ -65,7 +66,7 @@ if [ "$GPU_COUNT" -eq 0 ] || [ -z "$ALL_GPUS" ]; then
     echo -e "${YELLOW}  ⚠️  You may need a dedicated GPU / Puede que necesites una GPU dedicada${NC}"
     echo ""
     echo "  Continue anyway? (y/n) / ¿Continuar de todos modos? (y/n):"
-    read -r continue_anyway
+    read -r continue_anyway < /dev/tty
     if [ "$continue_anyway" != "y" ] && [ "$continue_anyway" != "Y" ]; then
         exit 1
     fi
@@ -78,7 +79,7 @@ else
         echo "  2) Integrated GPU (Intel) / GPU integrada"
         echo "  3) Both (hybrid/PRIME) / Ambas (híbrido)"
         echo ""
-        read -r gpu_choice
+        read -r gpu_choice < /dev/tty
         
         case $gpu_choice in
             1)
@@ -113,7 +114,7 @@ if [ -z "$GPU" ]; then
 
 elif echo "$GPU" | grep -qi "amd\|ati"; then
     echo -e "  ${GREEN}→ AMD/ATI detected / detectada${NC}"
-    xbps-install -S -y mesa-dri mesa-vulkan-radeon vulkan-loader amdvlk mesa-vaapi linux-firmware-amd
+    xbps-install -S -y mesa-dri mesa-vulkan-radeon mesa-vaapi linux-firmware-amd
 
 elif echo "$GPU" | grep -qi "intel"; then
     echo -e "  ${GREEN}→ Intel detected / detectada${NC}"
@@ -125,7 +126,7 @@ elif echo "$GPU" | grep -qi "intel"; then
          HD Graphics 640|HD Graphics 650|GMA|Iron Lake|Sandy Bridge|Ivy Bridge|Haswell|Broadwell|Skylake"; then
         
         echo -e "  ${YELLOW}→ Old Intel detected (pre-2018) / Intel antiguo detectado${NC}"
-        xbps-install -S -y mesa-dri mesa-vulkan-intel vulkan-loader intel-video-accel linux-firmware-intel libva-intel-driver
+        xbps-install -S -y mesa-dri mesa-vulkan-intel intel-video-accel linux-firmware-intel libva-intel-driver
         cat > /etc/profile.d/intel-gpu.sh << 'EOF'
 # Intel GPU (old / antiguo)
 export LIBVA_DRIVER_NAME=i965
@@ -133,7 +134,7 @@ export VDPAU_DRIVER=i965
 EOF
     else
         echo -e "  ${GREEN}→ Modern Intel detected / Intel moderno detectado${NC}"
-        xbps-install -S -y mesa-dri mesa-vulkan-intel vulkan-loader intel-video-accel linux-firmware-intel intel-media-driver
+        xbps-install -S -y mesa-dri mesa-vulkan-intel intel-video-accel linux-firmware-intel intel-media-driver
         cat > /etc/profile.d/intel-gpu.sh << 'EOF'
 # Intel GPU (modern / moderno)
 export LIBVA_DRIVER_NAME=iHD
@@ -146,12 +147,7 @@ elif echo "$GPU" | grep -qi "nvidia"; then
     xbps-install -S -y void-repo-nonfree
     xbps-install -S -y nvidia nvidia-opencl nvidia-settings
 
-    echo "  Adding kernel parameters / Añadiendo parámetros al kernel..."
-    CURRENT_OPTIONS=$(cat /boot/loader/void-options.conf 2>/dev/null || echo "")
-    if ! echo "$CURRENT_OPTIONS" | grep -q "nvidia-drm.modeset=1"; then
-        echo "$CURRENT_OPTIONS nvidia-drm.modeset=1 fbdev=1" | tr -s ' ' > /boot/loader/void-options.conf
-    fi
-
+    echo "  Adding NVIDIA kernel module options / Añadiendo opciones de módulo NVIDIA..."
     cat > /etc/modprobe.d/nvidia-modeset.conf << 'EOF'
 options nvidia-drm modeset=1 fbdev=1
 EOF
@@ -162,37 +158,40 @@ else
 fi
 
 # ============================================
-# 3. SELECCIÓN DE SHELLS (REPOS OFICIALES)
+# 3. SELECCIÓN DE SHELLS
 # ============================================
 echo -e "${YELLOW}[3/8] Select shells to install / Selecciona shells a instalar:${NC}"
 echo ""
 echo "  1) Niri + Noctalia (recommended / recomendado)"
-echo "  2) Sway (Wayland compositor)"
+echo "  2) Sway"
 echo "  3) KDE Plasma (Wayland)"
 echo "  4) Multiple / Múltiples (select all you want)"
 echo ""
 echo -e "${YELLOW}Enter numbers separated by space (e.g. 1 3 4):${NC}"
 echo -e "${YELLOW}Introduce números separados por espacio (ej. 1 3 4):${NC}"
-read -r -a shell_selection
+read -r -a shell_selection < /dev/tty
 
 echo "  Installing shells / Instalando shells..."
 for selection in "${shell_selection[@]}"; do
     case $selection in
         1)
-            echo -e "  ${GREEN}→ Installing Niri + Noctalia (official Void repos)${NC}"
-            xbps-install -S -y niri noctalia
+            echo -e "  ${GREEN}→ Installing Niri + Noctalia${NC}"
+            # Añadir repo voiders-community para Noctalia
+            echo "repository=https://repo.voiders.dev" > /etc/xbps.d/10-voiders-community.conf
+            xbps-install -S -y niri noctalia noctalia-greeter
             ;;
         2)
-            echo -e "  ${GREEN}→ Installing Sway (official Void repos)${NC}"
-            xbps-install -S -y sway swaybg swaylock swaybar
+            echo -e "  ${GREEN}→ Installing Sway${NC}"
+            xbps-install -S -y sway swaybg swaylock
             ;;
         3)
-            echo -e "  ${GREEN}→ Installing KDE Plasma (official Void repos)${NC}"
+            echo -e "  ${GREEN}→ Installing KDE Plasma${NC}"
             xbps-install -S -y kde-plasma-desktop
             ;;
         4)
-            echo -e "  ${GREEN}→ Installing all available shells (official repos)${NC}"
-            xbps-install -S -y niri noctalia sway kde-plasma-desktop
+            echo -e "  ${GREEN}→ Installing all available shells${NC}"
+            echo "repository=https://repo.voiders.dev" > /etc/xbps.d/10-voiders-community.conf
+            xbps-install -S -y niri noctalia noctalia-greeter sway kde-plasma-desktop
             ;;
         *)
             echo -e "  ${YELLOW}→ Skipping invalid option / Opción inválida${NC}"
@@ -204,26 +203,57 @@ echo ""
 echo -e "${BLUE}ℹ️  All installed shells will be available in Noctalia Greeter${NC}"
 echo -e "${BLUE}ℹ️  Todas las shells instaladas estarán disponibles en Noctalia Greeter${NC}"
 echo ""
-# ============================================
-# WALLPAPER (SOLO SI NOCTALIA)
-# ============================================
 
+# ============================================
+# 4. UTILIDADES ESENCIALES
+# ============================================
+echo -e "${YELLOW}[4/8] Installing essential utilities / Instalando utilidades esenciales...${NC}"
+xbps-install -S -y fuzzel kitty pipewire wireplumber bluez polkit xdg-desktop-portal xdg-desktop-portal-gtk accountsservice
+echo -e "  ${GREEN}→ Essential utilities installed / utilidades instaladas${NC}"
+
+# ============================================
+# 5. GESTIÓN DE RED
+# ============================================
+echo -e "${YELLOW}[5/8] Network configuration / Configurando red...${NC}"
+echo -e "  Do you want NetworkManager? (y/n) / ¿Quieres NetworkManager? (y/n):${NC}"
+read -r use_nm < /dev/tty
+if [ "$use_nm" = "y" ] || [ "$use_nm" = "Y" ]; then
+    xbps-install -S -y network-manager network-manager-applet
+    ln -sf /etc/sv/NetworkManager /var/service/
+    echo -e "  ${GREEN}→ NetworkManager installed / instalado${NC}"
+else
+    echo -e "  ${YELLOW}→ NetworkManager not installed / no instalado (use iwd or configure manually)${NC}"
+    echo -e "  ${YELLOW}→ NetworkManager no instalado (usa iwd o configura manualmente)${NC}"
+fi
+
+# ============================================
+# 6. ACTIVAR SERVICIOS
+# ============================================
+echo -e "${YELLOW}[6/8] Enabling services / Activando servicios...${NC}"
+for svc in dbus greetd pipewire wireplumber accounts-daemon bluetooth; do
+    [ -d "/etc/sv/$svc" ] && ln -sf "/etc/sv/$svc" /var/service/
+done
+echo -e "  ${GREEN}→ Services enabled / Servicios activados${NC}"
+
+# ============================================
+# 7. WALLPAPER (SOLO SI NOCTALIA)
+# ============================================
 if command -v qs >/dev/null 2>&1 || [ -f /usr/bin/qs ]; then
-    echo -e "${YELLOW}[X/8] Setting default wallpaper for Noctalia...${NC}"
-    echo -e "${YELLOW}[X/8] Estableciendo wallpaper por defecto para Noctalia...${NC}"
+    echo -e "${YELLOW}[7/8] Setting default wallpaper for Noctalia...${NC}"
+    echo -e "${YELLOW}[7/8] Estableciendo wallpaper por defecto para Noctalia...${NC}"
 
     mkdir -p /usr/share/backgrounds
 
-    # Copiar el wallpaper incluido en el repo
-    # Asumiendo que el script se ejecuta desde el directorio del repo
     if [ -f "./void-desktop-setup-default.jpg" ]; then
         cp ./void-desktop-setup-default.jpg \
            /usr/share/backgrounds/void-desktop-setup-default.jpg
     else
-        echo "  Default wallpaper file not found in repo / Archivo de wallpaper no encontrado en el repo"
+        if command -v curl &> /dev/null; then
+            curl -L "https://raw.githubusercontent.com/void-linux/void-docs/master/src/assets/void-bg.jpg" \
+                -o /usr/share/backgrounds/void-desktop-setup-default.jpg 2>/dev/null || true
+        fi
     fi
 
-    # Configurar greeter para usar ese wallpaper
     mkdir -p /var/lib/noctalia-greeter
     cat > /var/lib/noctalia-greeter/greeter.toml << 'EOF'
 [appearance]
@@ -239,70 +269,12 @@ EOF
     echo -e "  ${GREEN}→ Default wallpaper set for Noctalia${NC}"
     echo -e "  ${GREEN}→ Wallpaper por defecto establecido para Noctalia${NC}"
 fi
-# ============================================
-# 4. INSTALAR GREETD + NOCTALIA GREETER
-# ============================================
-echo -e "${YELLOW}[4/8] Installing greetd + Noctalia Greeter...${NC}"
-xbps-install -S -y greetd noctalia-greeter
 
 # ============================================
-# 5. UTILIDADES ESENCIALES
+# 8. CONFIGURACIÓN MÍNIMA DE SHELLS
 # ============================================
-echo -e "${YELLOW}[5/8] Installing essential utilities / Instalando utilidades esenciales...${NC}"
-xbps-install -S -y fuzzel kitty pipewire wireplumber bluez polkit xdg-desktop-portal xdg-desktop-portal-gtk accountsservice
+echo -e "${YELLOW}[8/8] Creating minimal shell configurations / Creando configuraciones mínimas...${NC}"
 
-# ============================================
-# 6. GESTIÓN DE RED
-# ============================================
-echo -e "${YELLOW}[6/8] Network configuration / Configurando red...${NC}"
-echo -e "  Do you want NetworkManager? (y/n) / ¿Quieres NetworkManager? (y/n):${NC}"
-read -r use_nm
-if [ "$use_nm" = "y" ] || [ "$use_nm" = "Y" ]; then
-    xbps-install -S -y network-manager network-manager-applet
-    ln -s /etc/sv/NetworkManager /var/service/
-fi
-
-# ============================================
-# 7. ACTIVAR SERVICIOS
-# ============================================
-echo -e "${YELLOW}[7/8] Enabling services / Activando servicios...${NC}"
-for svc in dbus greetd pipewire wireplumber accounts-daemon bluetooth; do
-    [ -d "/etc/sv/$svc" ] && ln -sf "/etc/sv/$svc" /var/service/
-done
-
-# ============================================
-# 8. CONFIGURACIÓN GREETER + SHELLS
-# ============================================
-echo -e "${YELLOW}[8/8] Configuring greeter and shells / Configurando greeter y shells...${NC}"
-
-# greetd
-cat > /etc/greetd/config.toml << 'EOF'
-[default_session]
-command = "/usr/bin/noctalia-greeter-session"
-user = "greeter"
-EOF
-
-# greeter.toml (solo apariencia mínima + wallpaper)
-mkdir -p /var/lib/noctalia-greeter
-cat > /var/lib/noctalia-greeter/greeter.toml << 'EOF'
-[appearance]
-scheme = "Synced"
-theme_mode = "dark"
-
-[appearance.wallpaper]
-path = "/usr/share/backgrounds/void-niri-bg.jpg"
-fill_mode = "cover"
-EOF
-chmod 644 /var/lib/noctalia-greeter/greeter.toml
-
-# wallpaper predeterminado
-mkdir -p /usr/share/backgrounds
-if command -v curl &> /dev/null; then
-    curl -L "https://raw.githubusercontent.com/void-linux/void-docs/master/src/assets/void-bg.jpg" \
-        -o /usr/share/backgrounds/void-niri-bg.jpg 2>/dev/null || true
-fi
-
-# Configuración mínima de Niri
 if command -v niri &> /dev/null; then
     mkdir -p "/home/$CURRENT_USER/.config/niri"
     cat > "/home/$CURRENT_USER/.config/niri/config.kdl" << 'EOF'
@@ -328,9 +300,9 @@ binds {
 }
 EOF
     chown -R "$CURRENT_USER":"$CURRENT_USER" "/home/$CURRENT_USER/.config/niri"
+    echo -e "  ${GREEN}→ Niri configuration created / configuración creada${NC}"
 fi
 
-# Configuración mínima de Noctalia Shell
 if command -v qs &> /dev/null; then
     mkdir -p "/home/$CURRENT_USER/.config/quickshell/noctalia-shell"
     cat > "/home/$CURRENT_USER/.config/quickshell/noctalia-shell/config.toml" << 'EOF'
@@ -346,8 +318,38 @@ fill_mode = "cover"
 auto_sync_greeter = true
 EOF
     chown -R "$CURRENT_USER":"$CURRENT_USER" "/home/$CURRENT_USER/.config/quickshell"
+    echo -e "  ${GREEN}→ Noctalia Shell configuration created / configuración creada${NC}"
+fi
+
+echo -e "  ${GREEN}→ Minimal shell configurations created / configuraciones mínimas creadas${NC}"
+
+# ============================================
+# RESUMEN FINAL
+# ============================================
+echo ""
+echo -e "${GREEN}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║          ✅ Setup completed successfully!              ║${NC}"
+echo -e "${GREEN}║          ✅ Setup completado exitosamente!             ║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${BLUE}Features included / Características incluidas:${NC}"
+echo "  ✓ GPU drivers configured / drivers de GPU configurados"
+echo "  ✓ Selected shells installed / shells seleccionadas instaladas"
+echo "  ✓ Noctalia Greeter with auto-sync / con sincronización automática"
+echo "  ✓ Default wallpaper installed / wallpaper por defecto instalado"
+echo "  ✓ Essential services enabled / servicios activados"
+
+if echo "$GPU" | grep -qi "nvidia"; then
+    echo "  ✓ NVIDIA kernel module options configured / opciones de módulo NVIDIA configuradas"
 fi
 
 echo ""
-echo -e "${GREEN}Setup completed / Setup completado${NC}"
-echo "Reboot and log in via Noctalia Greeter / Reinicia y entra por Noctalia Greeter."
+echo -e "${YELLOW}Next steps / Próximos pasos:${NC}"
+echo "  1. Reboot: sudo reboot"
+echo "  2. Login at Noctalia Greeter / Inicia sesión en Noctalia Greeter"
+echo "  3. Select your preferred shell / Selecciona tu shell preferida"
+echo "  4. Customize from Settings → Appearance / Personaliza desde Settings → Appearance"
+echo ""
+echo -e "${BLUE}Repository / Repositorio: https://github.com/SirOtter0/void-desktop-setup${NC}"
+echo -e "${BLUE}Documentation / Documentación: https://docs.noctalia.dev/ & https://docs.voidlinux.org/${NC}"
+echo ""
