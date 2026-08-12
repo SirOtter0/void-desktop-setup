@@ -61,7 +61,7 @@ sudo ./void-desktop-setup.sh
    - No GPU: basic mesa-dri + warning
 
 2. **Lets you select shells** to install (all from official Void repos):
-   - Niri + Noctalia
+   - Niri + Noctalia (Noctalia from `voiders-community` repo)
    - Sway
    - KDE Plasma (Wayland)
    - Multiple shells (all appear in greeter)
@@ -232,7 +232,7 @@ sudo ./void-desktop-setup.sh
    - Sin GPU: mesa-dri básico + aviso.
 
 2. **Permite seleccionar shells** a instalar (todas de repos oficiales de Void):
-   - Niri + Noctalia.
+   - Niri + Noctalia.(Noctalia de `voiders-community` repo)
    - Sway.
    - KDE Plasma (Wayland).
    - Múltiples shells (todas aparecen en el greeter).
