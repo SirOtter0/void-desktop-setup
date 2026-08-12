@@ -6,43 +6,39 @@
 
 ## English
 
-Minimal post-installation script to set up Void Linux with your choice of Wayland compositors and desktop shells (Niri, Sway, KDE Plasma) plus Noctalia Greeter for a polished login experience.
+Minimal post-installation script for Void Linux with selectable desktop options (Niri + Noctalia, Sway, KDE Plasma).
 
-All installed shells come from **official Void Linux repositories only**. No third-party repos, no building from source.
+### Package sources
 
-### ✨ Features
+- **Sway** and **KDE Plasma** are installed from official Void repositories.
+- **Niri + Noctalia + Noctalia Greeter** require `https://repo.voiders.dev` (configured only when that option is selected).
 
-- 🔧 **Automatic GPU detection** (AMD, Intel, NVIDIA)
-  - Detects old vs modern Intel GPUs
-  - Handles multiple GPUs (hybrid systems)
-  - Warns if no GPU detected
-- 🎨 **Multiple shell support (official Void repos only)**
-  - Niri + Noctalia (recommended)
-  - Sway (Wayland compositor)
-  - KDE Plasma (Wayland)
-  - Install multiple shells and choose at login
-- 🖼️ **Noctalia Greeter** with session selector
-  - All installed shells appear in greeter
-  - Choose different shell at each login
-  - Auto-sync with shell appearance
-- 🎯 **Void Linux inspired colors** (dark theme with red accents)
-- ⌨️ **Minimal preconfigured shortcuts** (Spanish layout by default)
-- 🚀 **Minimalist** (only essential utilities)
+### Features
 
-### 📋 Requirements
+- Interactive post-install workflow.
+- GPU detection with driver installation in a dedicated step (AMD/Intel/NVIDIA/basic fallback).
+- Optional shell selection: Niri+Noctalia, Sway, KDE, or all.
+- Conditional Noctalia/Greetd setup (only when Noctalia is selected).
+- Service enabling for runit with existence checks and clear enabled/skipped reporting.
+- Optional NetworkManager installation and service enabling.
+- Existing configuration and wallpaper files are backed up once with a `.void-desktop-setup.bak` suffix before replacement.
 
-- Void Linux installed (base or minimal ISO)
-- Internet connection
-- User with sudo privileges
-- ~2-4GB free space (more if installing multiple shells)
+### Requirements
 
-### 🚀 Installation
+- Void Linux (base/minimal install).
+- Internet access.
+- Root execution (`sudo`), plus a non-root desktop user.
+- Interactive terminal (`/dev/tty` readable), because the script prompts for choices.
+
+### Installation
 
 #### Quick install
 
 ```bash
-sudo curl -sL https://raw.githubusercontent.com/SirOtter0/void-desktop-setup/main/void-desktop-setup.sh | bash
+curl -sL https://raw.githubusercontent.com/SirOtter0/void-desktop-setup/main/void-desktop-setup.sh | sudo bash
 ```
+
+> `curl ... | sudo bash` keeps script execution as root and still allows interactive `/dev/tty` prompts.
 
 #### Manual install
 
@@ -52,168 +48,137 @@ cd void-desktop-setup
 sudo ./void-desktop-setup.sh
 ```
 
-### ⚙️ What the script does
+### What the script does
 
-1. **Detects GPU** and installs appropriate drivers:
-   - AMD: mesa-dri, mesa-vulkan-radeon, amdvlk
-   - Intel: mesa-dri, mesa-vulkan-intel (i965 for old, iHD for modern)
-   - NVIDIA: nvidia drivers + kernel parameters (nvidia-drm.modeset=1)
-   - No GPU: basic mesa-dri + warning
+1. **Preflight checks**:
+   - root/non-root desktop user validation,
+   - Void/xbps availability checks,
+   - interactive tty checks,
+   - `lspci` availability handling (`pciutils`).
 
-2. **Lets you select shells** to install (all from official Void repos):
-   - Niri + Noctalia (Noctalia from `voiders-community` repo)
-   - Sway
-   - KDE Plasma (Wayland)
-   - Multiple shells (all appear in greeter)
+2. **GPU detection and driver install**:
+   - AMD: `mesa-dri mesa-vulkan-radeon mesa-vaapi linux-firmware-amd`
+   - Intel: `mesa-dri mesa-vulkan-intel intel-video-accel linux-firmware-intel` plus old/new VA driver selection
+   - NVIDIA: `void-repo-nonfree nvidia nvidia-opencl nvidia-settings`
+   - Unknown/no GPU: `mesa-dri vulkan-loader`
 
-3. **Installs essential utilities**:
-   - greetd + Noctalia Greeter
-   - pipewire + wireplumber (audio)
-   - bluez (Bluetooth)
-   - polkit (permissions)
-   - xdg-desktop-portal (Wayland integration)
-   - fuzzel (launcher)
-   - kitty (terminal)
+3. **Desktop selection**:
+   - `1` Niri + Noctalia (+ Noctalia Greeter, greetd)
+   - `2` Sway
+   - `3` KDE Plasma
+   - `4` all above
 
-4. **Configures services** (runit):
-   - dbus
-   - greetd
-   - pipewire
-   - wireplumber
-   - accounts-daemon
-   - bluetooth (if available)
+4. **Essential utilities**:
+   - `fuzzel kitty pipewire wireplumber bluez polkit xdg-desktop-portal xdg-desktop-portal-gtk accountsservice`
 
-5. **Creates minimal configs**:
-   - Niri: Spanish layout + basic shortcuts + auto-launch Noctalia
-   - Noctalia Shell: dark theme + auto-sync with greeter + default wallpaper
-   - Noctalia Greeter: same wallpaper + dark theme
+5. **NetworkManager (optional)**:
+   - installs `NetworkManager network-manager-applet`
+   - enables runit service only if `/etc/sv/NetworkManager` exists
 
-6. **Downloads default wallpaper** (Void Linux red background)
+6. **Service enabling (runit, conditional/existence-checked)**:
+   - attempts: `dbus`, `bluetooth`, `greetd` (if Noctalia selected), `NetworkManager` (if selected), `pipewire`, `wireplumber`, `accounts-daemon`
 
-### 🎨 Multiple Shells
+7. **Noctalia-only config (conditional)**:
+   - greetd config with `noctalia-greeter` command if binary is available,
+   - greeter wallpaper/theme file only when relevant paths exist,
+   - no greeter/session promises for Sway-only/KDE-only installations.
 
-When you install multiple shells (e.g., Niri + Sway + KDE), **all will be available in Noctalia Greeter**. You can choose a different shell at each login!
+8. **Niri config**:
+   - keyboard layout `es`
+   - shortcuts:
+     - `Mod+Return` terminal (`kitty`)
+     - `Mod+Q` close window
+     - `Mod+Shift+E` launcher (`fuzzel`)
 
-This is perfect for:
-- Testing different Wayland compositors
-- Having a fallback if one fails
-- Sharing the PC with different user preferences
+### NVIDIA note
 
-### 🎯 Default Configuration
+The script writes **module options** in `/etc/modprobe.d/nvidia-modeset.conf` (`options nvidia-drm modeset=1`).
+It does **not** edit kernel command-line parameters automatically.
 
-#### Niri
-- Spanish keyboard layout
-- Basic shortcuts:
-  - `Mod+Return`: terminal (kitty)
-  - `Mod+Q`: close window
-  - `Mod+Shift+E`: launcher (fuzzel)
-  - `Mod+F1-F3`: volume control
-  - `Mod+F4-F5`: brightness control
-- Auto-launch Noctalia Shell
+### Dry run
 
-#### Noctalia Shell
-- Dark theme
-- Auto-sync with greeter (wallpaper, colors)
-- Default wallpaper (Void Linux red)
-- Minimal config (customize from Settings)
+You can execute a dry run to preview actions:
 
-#### Noctalia Greeter
-- Same wallpaper as shell
-- Dark theme with Void red accents
-- Session selector (all installed shells)
+```bash
+sudo ./void-desktop-setup.sh --dry-run
+```
 
-### 🛠️ Customization
+### Tests (non-destructive)
 
-After installation, customize from:
+A mock harness is provided:
 
-- **Settings → Appearance**: colors, wallpaper, theme
-- **Settings → Keybinds**: keyboard shortcuts
-- **Settings → Plugins**: widgets and panels
-- **Settings → Security**: auto-sync greeter
+```bash
+bash -n /absolute/path/to/void-desktop-setup.sh
+bash /absolute/path/to/tests/mock-smoke-tests.sh
+```
 
-### ⚠️ Important Notes
+The mock tests run without changing host services/packages and cover:
+- no GPU,
+- Intel/AMD/NVIDIA detection,
+- single-shell and all-shell selections,
+- NetworkManager yes/no paths.
 
-#### NVIDIA GPUs
+### Limits of non-VM tests
 
-The script automatically adds kernel parameters:
-- `nvidia-drm.modeset=1`
-- `fbdev=1`
+Mock tests cannot fully validate real package metadata, real runit service content, or graphical session behavior. Validate on an actual Void graphical VM for final integration confidence.
 
-These are required for Wayland support on NVIDIA.
-
-#### NetworkManager
-
-The script asks if you want NetworkManager. If you answer "no", configure your network manually (iwd, dhcpcd, etc.).
-
-### 📚 Useful Links
+### Useful links
 
 - [Noctalia Documentation](https://docs.noctalia.dev/)
-- [Niri Documentation](https://github.com/niri-wm/niri)
-- [Sway Documentation](https://swaywm.org/)
 - [Void Linux Handbook](https://docs.voidlinux.org/)
-- [Void Linux Download](https://voidlinux.org/download/)
+- [Niri](https://github.com/niri-wm/niri)
+- [Sway](https://swaywm.org/)
+- [KDE Plasma](https://kde.org/plasma-desktop)
 
-### 🤝 Contributing
+### License
 
-1. Fork the project.
-2. Create your branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request.
+See [LICENSE](LICENSE).
 
-### 📄 License
+### Acknowledgments
 
-See the [LICENSE](LICENSE) file for license details.
-
-### 🙏 Acknowledgments
-
-- [Void Linux](https://voidlinux.org/) – Base distribution.
-- [Niri](https://github.com/niri-wm/niri) – Scrollable tiling Wayland compositor.
-- [Noctalia](https://github.com/noctalia-dev/noctalia) – Desktop shell.
-- [Sway](https://swaywm.org/) – i3-compatible Wayland compositor.
-- [KDE Plasma](https://kde.org/plasma-desktop) – Full-featured desktop environment.
+- [Void Linux](https://voidlinux.org/)
+- [Niri](https://github.com/niri-wm/niri)
+- [Noctalia](https://github.com/noctalia-dev/noctalia)
+- [Sway](https://swaywm.org/)
+- [KDE Plasma](https://kde.org/plasma-desktop)
 
 ---
 
 ## Español
 
-Script de post-instalación minimalista para configurar Void Linux con tu elección de compositores Wayland y shells de escritorio (Niri, Sway, KDE Plasma) más Noctalia Greeter para una experiencia de login pulida.
+Script minimalista de post-instalación para Void Linux con opciones de escritorio seleccionables (Niri + Noctalia, Sway, KDE Plasma).
 
-Todas las shells instaladas provienen **únicamente de los repositorios oficiales de Void Linux**. Sin repos de terceros, sin compilar desde fuente.
+### Fuentes de paquetes
 
-### ✨ Características
+- **Sway** y **KDE Plasma** se instalan desde repositorios oficiales de Void.
+- **Niri + Noctalia + Noctalia Greeter** requieren `https://repo.voiders.dev` (se configura solo si eliges esa opción).
 
-- 🔧 **Detección automática de GPU** (AMD, Intel, NVIDIA)
-  - Detecta Intel antiguo vs moderno.
-  - Maneja múltiples GPUs (sistemas híbridos).
-  - Avisa si no se detecta GPU.
-- 🎨 **Soporte para múltiples shells (solo repos oficiales de Void)**
-  - Niri + Noctalia (recomendado).
-  - Sway (compositor Wayland).
-  - KDE Plasma (Wayland).
-  - Instala múltiples shells y elige en el login.
-- 🖼️ **Noctalia Greeter** con selector de sesiones.
-  - Todas las shells instaladas aparecen en el greeter.
-  - Elige shell diferente en cada login.
-  - Sincronización automática con la apariencia del shell.
-- 🎯 **Colores inspirados en Void Linux** (tema oscuro con acentos rojos).
-- ⌨️ **Atajos preconfigurados mínimos** (layout español por defecto).
-- 🚀 **Minimalista** (solo utilidades esenciales).
+### Características
 
-### 📋 Requisitos
+- Flujo interactivo de post-instalación.
+- Detección de GPU con instalación de drivers en un paso separado (AMD/Intel/NVIDIA/fallback básico).
+- Selección opcional de shells: Niri+Noctalia, Sway, KDE o todas.
+- Configuración condicional de Noctalia/Greetd (solo cuando se selecciona Noctalia).
+- Activación de servicios para runit con verificación de existencia y reporte claro de activados/omitidos.
+- Instalación opcional de NetworkManager y activación de su servicio.
+- Los archivos de configuración y wallpaper existentes se respaldan una vez con el sufijo `.void-desktop-setup.bak` antes de reemplazarse.
 
-- Void Linux instalado (ISO base o minimal).
-- Conexión a internet.
-- Usuario con permisos sudo.
-- ~2-4GB espacio libre (más si instalas múltiples shells).
+### Requisitos
 
-### 🚀 Instalación
+- Void Linux (instalación base/minimal).
+- Acceso a internet.
+- Ejecución como root (`sudo`) y usuario de escritorio no-root.
+- Terminal interactiva (`/dev/tty` legible), ya que el script pide opciones.
+
+### Instalación
 
 #### Instalación rápida
 
 ```bash
-sudo curl -sL https://raw.githubusercontent.com/SirOtter0/void-desktop-setup/main/void-desktop-setup.sh | bash
+curl -sL https://raw.githubusercontent.com/SirOtter0/void-desktop-setup/main/void-desktop-setup.sh | sudo bash
 ```
+
+> `curl ... | sudo bash` mantiene la ejecución como root y permite los prompts interactivos por `/dev/tty`.
 
 #### Instalación manual
 
@@ -223,119 +188,96 @@ cd void-desktop-setup
 sudo ./void-desktop-setup.sh
 ```
 
-### ⚙️ Qué hace el script
+### Qué hace el script
 
-1. **Detecta GPU** e instala drivers apropiados:
-   - AMD: mesa-dri, mesa-vulkan-radeon, amdvlk.
-   - Intel: mesa-dri, mesa-vulkan-intel (i965 para antiguo, iHD para moderno).
-   - NVIDIA: drivers nvidia + parámetros de kernel (`nvidia-drm.modeset=1`).
-   - Sin GPU: mesa-dri básico + aviso.
+1. **Preflight checks**:
+   - validación root/usuario de escritorio no-root,
+   - verificación de disponibilidad de Void/xbps,
+   - verificación de tty interactivo,
+   - manejo de disponibilidad de `lspci` (`pciutils`).
 
-2. **Permite seleccionar shells** a instalar (todas de repos oficiales de Void):
-   - Niri + Noctalia.(Noctalia de `voiders-community` repo)
-   - Sway.
-   - KDE Plasma (Wayland).
-   - Múltiples shells (todas aparecen en el greeter).
+2. **Detección de GPU e instalación de drivers**:
+   - AMD: `mesa-dri mesa-vulkan-radeon mesa-vaapi linux-firmware-amd`
+   - Intel: `mesa-dri mesa-vulkan-intel intel-video-accel linux-firmware-intel` más selección VA old/new
+   - NVIDIA: `void-repo-nonfree nvidia nvidia-opencl nvidia-settings`
+   - GPU desconocida/sin GPU: `mesa-dri vulkan-loader`
 
-3. **Instala utilidades esenciales**:
-   - greetd + Noctalia Greeter.
-   - pipewire + wireplumber (audio).
-   - bluez (Bluetooth).
-   - polkit (permisos).
-   - xdg-desktop-portal (integración Wayland).
-   - fuzzel (lanzador).
-   - kitty (terminal).
+3. **Selección de escritorio**:
+   - `1` Niri + Noctalia (+ Noctalia Greeter, greetd)
+   - `2` Sway
+   - `3` KDE Plasma
+   - `4` todas las anteriores
 
-4. **Configura servicios** (runit):
-   - dbus.
-   - greetd.
-   - pipewire.
-   - wireplumber.
-   - accounts-daemon.
-   - bluetooth (si está disponible).
+4. **Utilidades esenciales**:
+   - `fuzzel kitty pipewire wireplumber bluez polkit xdg-desktop-portal xdg-desktop-portal-gtk accountsservice`
 
-5. **Crea configuraciones mínimas**:
-   - Niri: layout español + atajos básicos + auto-lanzar Noctalia.
-   - Noctalia Shell: tema oscuro + auto-sincronizar con greeter + wallpaper por defecto.
-   - Noctalia Greeter: mismo wallpaper + tema oscuro.
+5. **NetworkManager (opcional)**:
+   - instala `NetworkManager network-manager-applet`
+   - activa el servicio runit solo si existe `/etc/sv/NetworkManager`
 
-6. **Descarga wallpaper por defecto** (fondo rojo de Void Linux).
+6. **Activación de servicios (runit, condicional y con verificación)**:
+   - intenta: `dbus`, `bluetooth`, `greetd` (si se eligió Noctalia), `NetworkManager` (si se eligió), `pipewire`, `wireplumber`, `accounts-daemon`
 
-### 🎨 Múltiples Shells
+7. **Configuración solo para Noctalia (condicional)**:
+   - configuración de greetd con comando `noctalia-greeter` si el binario existe,
+   - archivo de wallpaper/tema del greeter solo cuando las rutas relevantes existen,
+   - sin promesas de greeter/sesiones para instalaciones solo Sway/KDE.
 
-Cuando instalas múltiples shells (ej: Niri + Sway + KDE), **todas estarán disponibles en Noctalia Greeter**. ¡Puedes elegir shell diferente en cada login!
+8. **Configuración de Niri**:
+   - layout de teclado `es`
+   - atajos:
+     - `Mod+Return` terminal (`kitty`)
+     - `Mod+Q` cerrar ventana
+     - `Mod+Shift+E` lanzador (`fuzzel`)
 
-Esto es perfecto para:
-- Probar diferentes compositores Wayland.
-- Tener un fallback si uno falla.
-- Compartir el PC con diferentes preferencias de usuario.
+### Nota sobre NVIDIA
 
-### 🎯 Configuración por defecto
+El script escribe **opciones de módulo** en `/etc/modprobe.d/nvidia-modeset.conf` (`options nvidia-drm modeset=1`).
+No modifica automáticamente parámetros de línea de kernel.
 
-#### Niri
-- Layout de teclado español.
-- Atajos básicos:
-  - `Mod+Return`: terminal (kitty).
-  - `Mod+Q`: cerrar ventana.
-  - `Mod+Shift+E`: lanzador (fuzzel).
-  - `Mod+F1-F3`: control de volumen.
-  - `Mod+F4-F5`: control de brillo.
-- Auto-lanzar Noctalia Shell.
+### Modo dry run
 
-#### Noctalia Shell
-- Tema oscuro.
-- Auto-sincronización con greeter (wallpaper, colores).
-- Wallpaper por defecto (rojo de Void Linux).
-- Configuración mínima (personaliza desde Settings).
+Puedes ejecutar un dry run para previsualizar acciones:
 
-#### Noctalia Greeter
-- Mismo wallpaper que el shell.
-- Tema oscuro con acentos rojos de Void.
-- Selector de sesión (todas las shells instaladas).
+```bash
+sudo ./void-desktop-setup.sh --dry-run
+```
 
-### 🛠️ Personalización
+### Pruebas (no destructivas)
 
-Después de la instalación, personaliza desde:
+Se incluye un harness de mocks:
 
-- **Settings → Appearance**: colores, wallpaper, tema.
-- **Settings → Keybinds**: atajos de teclado.
-- **Settings → Plugins**: widgets y paneles.
-- **Settings → Security**: auto-sincronizar greeter.
+```bash
+bash -n /ruta/absoluta/a/void-desktop-setup.sh
+bash /ruta/absoluta/a/tests/mock-smoke-tests.sh
+```
 
-### ⚠️ Notas importantes
+Las pruebas mock se ejecutan sin cambiar servicios/paquetes del host y cubren:
+- sin GPU,
+- detección Intel/AMD/NVIDIA,
+- selección de shell única y de todas,
+- rutas de NetworkManager sí/no.
 
-#### GPUs NVIDIA
+### Límites sin VM
 
-El script añade automáticamente parámetros al kernel:
-- `nvidia-drm.modeset=1`.
-- `fbdev=1`.
+Las pruebas mock no validan completamente metadatos reales de paquetes, contenido real de servicios runit ni comportamiento gráfico de sesión. Para validación final, prueba en una VM gráfica real de Void.
 
-Son requeridos para soporte Wayland en NVIDIA.
-
-#### NetworkManager
-
-El script pregunta si quieres NetworkManager. Si respondes "no", configura tu red manualmente (iwd, dhcpcd, etc.).
-
-### 📚 Enlaces útiles
+### Enlaces útiles
 
 - [Documentación de Noctalia](https://docs.noctalia.dev/)
-- [Documentación de Niri](https://github.com/niri-wm/niri)
-- [Documentación de Sway](https://swaywm.org/)
 - [Void Linux Handbook](https://docs.voidlinux.org/)
-- [Void Linux Download](https://voidlinux.org/download/)
+- [Niri](https://github.com/niri-wm/niri)
+- [Sway](https://swaywm.org/)
+- [KDE Plasma](https://kde.org/plasma-desktop)
 
-### 🤝 Contribuir
+### Licencia
 
-1. Haz fork del proyecto.
-2. Crea tu rama (`git checkout -b feature/AmazingFeature`).
-3. Haz commit de tus cambios (`git commit -m 'Add some AmazingFeature'`).
-4. Haz push a la rama (`git push origin feature/AmazingFeature`).
-5. Abre un Pull Request.
+Consulta [LICENSE](LICENSE).
 
-### 📄 Licencia
+### Agradecimientos
 
-Consulta el archivo [LICENSE](LICENSE) para los detalles de la licencia.
-
-### 🙏 Agradecimientos
-
-- [Void Linux](https://voidlinux.org/) – Distro base.
+- [Void Linux](https://voidlinux.org/)
+- [Niri](https://github.com/niri-wm/niri)
+- [Noctalia](https://github.com/noctalia-dev/noctalia)
+- [Sway](https://swaywm.org/)
+- [KDE Plasma](https://kde.org/plasma-desktop)
