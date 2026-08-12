@@ -21,6 +21,7 @@ Minimal post-installation script for Void Linux with selectable desktop options 
 - Conditional Noctalia/Greetd setup (only when Noctalia is selected).
 - Service enabling for runit with existence checks and clear enabled/skipped reporting.
 - Optional NetworkManager installation and service enabling.
+- Existing configuration and wallpaper files are backed up once with a `.void-desktop-setup.bak` suffix before replacement.
 
 ### Requirements
 
@@ -160,6 +161,7 @@ Script minimalista de post-instalación para Void Linux con opciones de escritor
 - Configuración condicional de Noctalia/Greetd (solo cuando se selecciona Noctalia).
 - Activación de servicios para runit con verificación de existencia y reporte claro de activados/omitidos.
 - Instalación opcional de NetworkManager y activación de su servicio.
+- Los archivos de configuración y wallpaper existentes se respaldan una vez con el sufijo `.void-desktop-setup.bak` antes de reemplazarse.
 
 ### Requisitos
 
