@@ -30,6 +30,7 @@ run_scenario() {
     local lspci_output="$2"
     local input_payload="$3"
     local missing_cmds="$4"
+    local preexisting_nvidia_config="${5:-}"
 
     local scenario_dir="$TMP_ROOT/$name"
     local bin_dir="$scenario_dir/bin"
@@ -42,6 +43,9 @@ run_scenario() {
 
     mkdir -p "$bin_dir" "$sv_dir" "$home_dir" "$service_dir" "$scenario_dir/etc" "$scenario_dir/backgrounds" "$scenario_dir/noctalia-greeter"
     mkdir -p "$sv_dir/dbus" "$sv_dir/bluetooth" "$sv_dir/greetd" "$sv_dir/NetworkManager"
+    if [[ -n "$preexisting_nvidia_config" ]]; then
+        printf '%s\n' "$preexisting_nvidia_config" > "$scenario_dir/etc/nvidia-modeset.conf"
+    fi
 
     cat > "$bin_dir/xbps-install" <<'EOS'
 #!/usr/bin/env bash
@@ -143,5 +147,9 @@ assert_contains "$scenario_nvidia/xbps.log" '\bnvidia\b'
 assert_contains "$scenario_nvidia/xbps.log" '\bkde-plasma-desktop\b'
 assert_not_contains "$scenario_nvidia/xbps.log" '\bnoctalia\b'
 assert_contains "$scenario_nvidia/run.log" 'module options only; kernel cmdline is not modified'
+
+# 5) preserve an existing NVIDIA configuration before replacing it
+scenario_nvidia_backup="$(run_scenario "nvidia_backup" "$multi_gpu_output" $'1\n3\nn' "" 'options nvidia-drm modeset=0')"
+assert_contains "$scenario_nvidia_backup/run.log" 'preserve .*/nvidia-modeset.conf -> .*/nvidia-modeset.conf.void-desktop-setup.bak'
 
 echo "All mock smoke tests passed."

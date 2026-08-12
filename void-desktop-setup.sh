@@ -94,13 +94,34 @@ run_cmd() {
 write_file() {
     local target="$1"
     if $DRY_RUN; then
+        if [[ -e "$target" || -L "$target" ]]; then
+            echo "[dry-run] preserve $target -> ${target}.void-desktop-setup.bak"
+        fi
         echo "[dry-run] write $target"
         cat >/dev/null
         return 0
     fi
 
+    preserve_existing_file "$target"
     mkdir -p "$(dirname "$target")"
     cat > "$target"
+}
+
+preserve_existing_file() {
+    local target="$1"
+    local backup_path="${target}.void-desktop-setup.bak"
+
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+        return 0
+    fi
+
+    if [[ -e "$backup_path" || -L "$backup_path" ]]; then
+        log_warn "→ Existing $target is being replaced; original backup already exists at $backup_path"
+        return 0
+    fi
+
+    cp -a -- "$target" "$backup_path"
+    log_warn "→ Existing $target saved to $backup_path"
 }
 
 read_line_from_tty() {
@@ -552,9 +573,13 @@ configure_noctalia_assets() {
     local wallpaper_path="$BACKGROUND_DIR/void-desktop-setup-default.jpg"
     if [[ -f "$SCRIPT_DIR/void-desktop-setup-default.jpg" ]]; then
         if $DRY_RUN; then
+            if [[ -e "$wallpaper_path" || -L "$wallpaper_path" ]]; then
+                echo "[dry-run] preserve $wallpaper_path -> ${wallpaper_path}.void-desktop-setup.bak"
+            fi
             echo "[dry-run] copy $SCRIPT_DIR/void-desktop-setup-default.jpg -> $wallpaper_path"
         else
             mkdir -p "$BACKGROUND_DIR"
+            preserve_existing_file "$wallpaper_path"
             cp "$SCRIPT_DIR/void-desktop-setup-default.jpg" "$wallpaper_path"
         fi
     else
