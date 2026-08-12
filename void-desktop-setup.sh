@@ -205,27 +205,22 @@ echo -e "${BLUE}ℹ️  All installed shells will be available in Noctalia Greet
 echo -e "${BLUE}ℹ️  Todas las shells instaladas estarán disponibles en Noctalia Greeter${NC}"
 echo ""
 # ============================================
-# 3.5. WALLPAPER (SOLO SI NOCTALIA)
+# WALLPAPER (SOLO SI NOCTALIA)
 # ============================================
 
-# Detectar si Noctalia está instalado
 if command -v qs >/dev/null 2>&1 || [ -f /usr/bin/qs ]; then
-    echo -e "${YELLOW}[3.5/8] Setting default wallpaper for Noctalia...${NC}"
-    echo -e "${YELLOW}[3.5/8] Estableciendo wallpaper por defecto para Noctalia...${NC}"
+    echo -e "${YELLOW}[X/8] Setting default wallpaper for Noctalia...${NC}"
+    echo -e "${YELLOW}[X/8] Estableciendo wallpaper por defecto para Noctalia...${NC}"
 
     mkdir -p /usr/share/backgrounds
 
-    # Opción A: usar un fondo propio empaquetado en el repo (si lo subes)
-    # Ejemplo: assets/void-desktop-setup-default.jpg junto al script
+    # Copiar el wallpaper incluido en el repo
+    # Asumiendo que el script se ejecuta desde el directorio del repo
     if [ -f "./void-desktop-setup-default.jpg" ]; then
         cp ./void-desktop-setup-default.jpg \
            /usr/share/backgrounds/void-desktop-setup-default.jpg
     else
-        # Opción B: descargar el fondo oficial de Void como fallback
-        if command -v curl &> /dev/null; then
-            curl -L "https://raw.githubusercontent.com/void-linux/void-docs/master/src/assets/void-bg.jpg" \
-                -o /usr/share/backgrounds/void-desktop-setup-default.jpg 2>/dev/null || true
-        fi
+        echo "  Default wallpaper file not found in repo / Archivo de wallpaper no encontrado en el repo"
     fi
 
     # Configurar greeter para usar ese wallpaper
