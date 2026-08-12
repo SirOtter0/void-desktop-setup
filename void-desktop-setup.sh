@@ -205,6 +205,46 @@ echo -e "${BLUE}ℹ️  All installed shells will be available in Noctalia Greet
 echo -e "${BLUE}ℹ️  Todas las shells instaladas estarán disponibles en Noctalia Greeter${NC}"
 echo ""
 # ============================================
+# 3.5. WALLPAPER (SOLO SI NOCTALIA)
+# ============================================
+
+# Detectar si Noctalia está instalado
+if command -v qs >/dev/null 2>&1 || [ -f /usr/bin/qs ]; then
+    echo -e "${YELLOW}[3.5/8] Setting default wallpaper for Noctalia...${NC}"
+    echo -e "${YELLOW}[3.5/8] Estableciendo wallpaper por defecto para Noctalia...${NC}"
+
+    mkdir -p /usr/share/backgrounds
+
+    # Opción A: usar un fondo propio empaquetado en el repo (si lo subes)
+    # Ejemplo: assets/void-desktop-setup-default.jpg junto al script
+    if [ -f "./void-desktop-setup-default.jpg" ]; then
+        cp ./void-desktop-setup-default.jpg \
+           /usr/share/backgrounds/void-desktop-setup-default.jpg
+    else
+        # Opción B: descargar el fondo oficial de Void como fallback
+        if command -v curl &> /dev/null; then
+            curl -L "https://raw.githubusercontent.com/void-linux/void-docs/master/src/assets/void-bg.jpg" \
+                -o /usr/share/backgrounds/void-desktop-setup-default.jpg 2>/dev/null || true
+        fi
+    fi
+
+    # Configurar greeter para usar ese wallpaper
+    mkdir -p /var/lib/noctalia-greeter
+    cat > /var/lib/noctalia-greeter/greeter.toml << 'EOF'
+[appearance]
+scheme = "Synced"
+theme_mode = "dark"
+
+[appearance.wallpaper]
+path = "/usr/share/backgrounds/void-desktop-setup-default.jpg"
+fill_mode = "cover"
+EOF
+    chmod 644 /var/lib/noctalia-greeter/greeter.toml
+
+    echo -e "  ${GREEN}→ Default wallpaper set for Noctalia${NC}"
+    echo -e "  ${GREEN}→ Wallpaper por defecto establecido para Noctalia${NC}"
+fi
+# ============================================
 # 4. INSTALAR GREETD + NOCTALIA GREETER
 # ============================================
 echo -e "${YELLOW}[4/8] Installing greetd + Noctalia Greeter...${NC}"
@@ -296,7 +336,7 @@ EOF
 fi
 
 # Configuración mínima de Noctalia Shell
-if command -v qs &>  /dev/null; then
+if command -v qs &> /dev/null; then
     mkdir -p "/home/$CURRENT_USER/.config/quickshell/noctalia-shell"
     cat > "/home/$CURRENT_USER/.config/quickshell/noctalia-shell/config.toml" << 'EOF'
 [appearance]
@@ -304,7 +344,7 @@ scheme = "Synced"
 theme_mode = "dark"
 
 [appearance.wallpaper]
-path = "/usr/share/backgrounds/void-niri-bg.jpg"
+path = "/usr/share/backgrounds/void-desktop-setup-default.jpg"
 fill_mode = "cover"
 
 [sync]
