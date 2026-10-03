@@ -79,7 +79,13 @@ If `pulseaudio` is installed or a global audio service already exists, the scrip
 
 The default is `elogind` with `dbus` and `wireplumber-elogind`, providing seat access, login sessions and `XDG_RUNTIME_DIR` for Niri, Sway and Plasma. No additional seatd service or broad device-access groups are needed for this default.
 
-An existing enabled seatd/turnstile stack without elogind is retained for Niri/Sway; missing components are installed and enabled, and the user receives `_seatd`, `audio` and `video` membership. Seatd handles seats, while turnstile supplies runtime directories and session management. KDE, or an already installed elogind without an enabled elogind service alongside this alternative stack, requires manual reconciliation before continuing. Existing parallel enabled session services are preserved with a warning; their configuration must be reviewed.
+The script distinguishes an installed elogind package from enabled `elogind`, `seatd` and `turnstiled` services, and reports each state independently. Enabled means a runit entry exists; this does not prove that the daemon is running or managing the current session. Elogind can also be activated through D-Bus, so inspect the live session separately when necessary.
+
+For Niri/Sway, an existing enabled seatd/turnstile stack is retained when the elogind service is not enabled, **even if the elogind package is installed**. Missing components are installed and enabled, and the user receives `_seatd`, `audio` and `video` membership. Seatd handles seats; turnstile supplies runtime directories and session management. If elogind and seatd are already enabled, both are preserved and `_seatd` membership is prepared; no extra turnstile service is added.
+
+The current Void Handbook permits turnstile with or without elogind. When both services are enabled, the script checks `/etc/turnstile/turnstiled.conf` for an unambiguous `manage_rundir = no`, leaving runtime-directory management to elogind. It never edits that file or removes/restarts existing session services. Missing/unreadable configuration, duplicate assignments, invalid values or oversized lines produce a clear warning; an already enabled combination is preserved without aborting. The check requires one explicit `no` assignment (case-sensitive, allowing surrounding whitespace); a commented-out setting or `no # comment` is not confirmation. Inspect whether the running daemon has loaded the configuration before logging in again. This coexistence is supported currently and may change in future Void releases.
+
+KDE uses elogind. An existing seatd service is preserved because seat management is separate. If turnstile is enabled and elogind would need enabling, the script requires the same confirmed `manage_rundir = no` before introducing elogind; otherwise it warns and stops before installing KDE or changing session services, for manual reconciliation. An installed elogind package alone never triggers that stop. With both services already enabled, KDE installation continues while reporting any uncertain/conflicting runtime configuration for manual correction.
 
 A graphical session needs a **user D-Bus bus** as well as `XDG_RUNTIME_DIR`. For a TTY session with elogind, use:
 
@@ -150,6 +156,7 @@ Nouveau fallback does not remove existing NVIDIA packages/blacklists or guarante
 - Void Handbook: [XBPS repositories](https://docs.voidlinux.org/xbps/repositories/index.html), [configuration precedence / changing mirrors](https://docs.voidlinux.org/xbps/repositories/mirrors/changing.html).
 - Official [Void package templates](https://github.com/void-linux/void-packages/tree/818cc6ea4ef4b9667e430270adc1451874053e11/srcpkgs) checked for current package names/subpackages, services and examples.
 - Niri: [important software / portals](https://niri-wm.github.io/niri/Important-Software.html), [session startup](https://niri-wm.github.io/niri/Getting-Started.html), [portal defaults](https://github.com/niri-wm/niri/blob/main/resources/niri-portals.conf).
+- Turnstile: [configuration syntax](https://github.com/chimera-linux/turnstile/blob/v0.1.11/turnstiled.conf.in), [boolean parser](https://github.com/chimera-linux/turnstile/blob/v0.1.11/src/cfg_utils.cc), matching the version in Void's package template.
 
 ### License and acknowledgments
 
@@ -230,7 +237,13 @@ Si está instalado `pulseaudio` o existe un servicio global de audio, se avisa y
 
 Por defecto se usan `elogind`, `dbus` y `wireplumber-elogind`: proporcionan acceso al seat, sesiones y `XDG_RUNTIME_DIR` para Niri, Sway y Plasma. No se añade seatd ni se necesitan grupos amplios de acceso a dispositivos en esta opción.
 
-Para Niri/Sway se conserva una pila seatd/turnstile ya activada sin elogind: se instalan/activan los componentes que falten y se añade el usuario a `_seatd`, `audio` y `video`. Seatd gestiona seats; turnstile proporciona directorios de runtime y sesiones. KDE, o elogind ya instalado pero sin servicio activado junto a esa pila alternativa, requiere reconciliación manual antes de continuar. Los servicios de sesión paralelos ya activados se conservan con una advertencia y deben revisarse.
+El script distingue el paquete elogind instalado de los servicios `elogind`, `seatd` y `turnstiled` habilitados, e informa cada estado por separado. Habilitado significa que existe una entrada runit; no demuestra que el daemon esté ejecutándose ni gestionando la sesión actual. Elogind también puede activarse mediante D-Bus: revisa la sesión real cuando corresponda.
+
+Para Niri/Sway se conserva una pila seatd/turnstile habilitada cuando el servicio elogind no lo está, **aunque el paquete elogind esté instalado**. Se instalan/activan los componentes que falten y se añade el usuario a `_seatd`, `audio` y `video`. Seatd gestiona seats; turnstile proporciona directorios de runtime y sesiones. Si elogind y seatd ya están habilitados, se conservan ambos y se prepara el grupo `_seatd`; no se añade otro servicio turnstile.
+
+El Handbook actual permite turnstile con o sin elogind. Si ambos servicios están habilitados, se comprueba `/etc/turnstile/turnstiled.conf` buscando un `manage_rundir = no` inequívoco, dejando la gestión del runtime a elogind. Nunca se modifica ese archivo ni se eliminan/reinician servicios de sesión existentes. Configuración ausente/no legible, asignaciones duplicadas, valores inválidos o líneas demasiado largas producen una advertencia clara: se conserva la combinación ya habilitada sin abortar. Se exige una única asignación explícita `no`, sensible a mayúsculas y permitiendo espacios; una línea comentada o `no # comentario` no confirma la opción. Verifica que el daemon haya cargado esa configuración antes de iniciar otra sesión. La coexistencia está admitida actualmente y puede cambiar en futuras versiones de Void.
+
+KDE utiliza elogind. Se conserva seatd porque la gestión de seats es independiente. Si turnstile está habilitado y hay que habilitar elogind, se exige el mismo `manage_rundir = no` confirmado antes de introducir elogind; si no, se avisa y se detiene antes de instalar KDE o cambiar servicios de sesión para permitir una reconciliación manual. Tener el paquete elogind instalado no provoca esa detención por sí solo. Si ambos servicios ya están habilitados, continúa la instalación KDE, advirtiendo de cualquier configuración de runtime desconocida/conflictiva que deba corregirse manualmente.
 
 La sesión gráfica necesita **D-Bus de usuario** y `XDG_RUNTIME_DIR`. Desde una TTY con elogind:
 

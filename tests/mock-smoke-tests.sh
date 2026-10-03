@@ -19,7 +19,7 @@ assert_no_package() { assert_not_contains "$CASE_DIR/packages" "^$1$"; }
 new_case() {
     CASE_DIR="$TMP_ROOT/$1"
     mkdir -p "$CASE_DIR"/{bin,sv,services,home,etc,backgrounds,noctalia-greeter,applications,system-repos}
-    mkdir -p "$CASE_DIR/examples"/{pipewire,wireplumber} "$CASE_DIR/alsa-share" "$CASE_DIR/etc/alsa" "$CASE_DIR/etc/pipewire"
+    mkdir -p "$CASE_DIR/examples"/{pipewire,wireplumber} "$CASE_DIR/alsa-share" "$CASE_DIR/etc/alsa" "$CASE_DIR/etc/pipewire" "$CASE_DIR/etc/turnstile"
     local svc
     # Audio service dirs deliberately exist: the script must never enable them.
     for svc in dbus bluetoothd greetd NetworkManager elogind seatd turnstiled accounts-daemon pipewire wireplumber pipewire-pulse pulseaudio dhcpcd wpa_supplicant iwd connmand wicd; do
@@ -147,6 +147,7 @@ run_case() {
         VDS_NOCTALIA_GREETER_DIR="$CASE_DIR/noctalia-greeter" VDS_EXAMPLES_DIR="$CASE_DIR/examples" \
         VDS_APPLICATIONS_DIR="$CASE_DIR/applications" VDS_ALSA_SHARE_DIR="$CASE_DIR/alsa-share" \
         VDS_ALSA_CONF_DIR="$CASE_DIR/etc/alsa" VDS_PIPEWIRE_SYSTEM_DIR="$CASE_DIR/etc/pipewire" \
+        VDS_TURNSTILE_CONF="$CASE_DIR/etc/turnstile/turnstiled.conf" \
         timeout 15 "${launch[@]}" < "$TARGET_SCRIPT" > "$CASE_DIR/run.log" 2>&1 || status=$?
     if [[ "$status" != "$expected" ]]; then
         cat "$CASE_DIR/run.log" >&2
@@ -163,6 +164,17 @@ snapshot() {
         find "$path" -type f -exec sha256sum {} + | sort
     done
     sha256sum "$CASE_DIR/packages" "$CASE_DIR/groups"
+}
+snapshot_session_stack() {
+    local path
+    for path in "$CASE_DIR/services/elogind" "$CASE_DIR/services/seatd" "$CASE_DIR/services/turnstiled" "$CASE_DIR/etc/turnstile/turnstiled.conf"; do
+        if [[ -e "$path" || -L "$path" ]]; then
+            stat --printf='%n %F %a %i %y %N\n' "$path"
+            if [[ -f "$path" ]]; then sha256sum "$path"; fi
+        else
+            printf '%s absent\n' "$path"
+        fi
+    done
 }
 assert_audio() {
     assert_package dbus
@@ -347,10 +359,12 @@ assert_no_package elogind
 
 new_case kde_alternative_seat
 ln -s "$CASE_DIR/sv/seatd" "$CASE_DIR/services/seatd"
-run_case $'3' apply 1
-assert_no_package kde-plasma
-assert_no_package elogind
-assert_contains "$CASE_DIR/run.log" 'requires manual reconciliation'
+run_case $'3\nn'
+assert_package kde-plasma
+assert_package elogind
+assert_link "$CASE_DIR/services/elogind" "$CASE_DIR/sv/elogind"
+assert_link "$CASE_DIR/services/seatd" "$CASE_DIR/sv/seatd"
+assert_no_package turnstile
 
 # Migration takes place only with explicit consent, never with custom service dirs.
 for svc in dhcpcd wpa_supplicant dhcpcd-eth0 wpa_supplicant-wlan0 dhclient udhcpc iwd connmand wicd; do
@@ -546,7 +560,7 @@ ln -s "$CASE_DIR/sv/seatd" "$CASE_DIR/services/seatd"
 run_case $'2\nn'
 assert_no_package seatd
 assert_package elogind
-assert_contains "$CASE_DIR/run.log" 'Existing parallel seat/session services'
+assert_contains "$CASE_DIR/run.log" 'Existing seatd preserved'
 
 new_case masked_system_repo
 printf 'repository=https://repo.voiders.dev\n' > "$CASE_DIR/system-repos/community.conf"
@@ -567,9 +581,142 @@ assert_contains "$CASE_DIR/run.log" 'Preserving existing configuration'
 new_case installed_elogind_with_seatd
 ln -s "$CASE_DIR/sv/seatd" "$CASE_DIR/services/seatd"
 echo elogind > "$CASE_DIR/packages"
-run_case $'2' apply 1
-assert_no_package turnstile
+run_case $'2\nn'
+assert_package turnstile
 assert_absent "$CASE_DIR/services/elogind"
+assert_contains "$CASE_DIR/run.log" 'elogind installed=true, elogind enabled=false, seatd enabled=true, turnstiled enabled=false'
+
+# Installed packages and enabled services are independent states.
+for compositor in 1 2; do
+    new_case "installed_elogind_existing_stack_$compositor"
+    printf 'elogind\nseatd\nturnstile\n' > "$CASE_DIR/packages"
+    ln -s "$CASE_DIR/sv/seatd" "$CASE_DIR/services/seatd"
+    ln -s "$CASE_DIR/sv/turnstiled" "$CASE_DIR/services/turnstiled"
+    printf 'manage_rundir = yes\nbackend = runit\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf"
+    snapshot_session_stack > "$CASE_DIR/session-before"
+    run_case "$(printf '%s\nn\nn\n' "$compositor")"
+    assert_absent "$CASE_DIR/services/elogind"
+    assert_no_package wireplumber-elogind
+    assert_contains "$CASE_DIR/run.log" 'elogind installed=true, elogind enabled=false, seatd enabled=true, turnstiled enabled=true'
+    for group in _seatd audio video; do assert_contains "$CASE_DIR/groups" "^$group$"; done
+    snapshot_session_stack > "$CASE_DIR/session-after"
+    cmp "$CASE_DIR/session-before" "$CASE_DIR/session-after" || fail 'changed existing alternative session stack'
+    assert_not_contains "$CASE_DIR/actions" '^sv (down|up)'
+    snapshot > "$CASE_DIR/before"
+    cp "$CASE_DIR/actions" "$CASE_DIR/actions-before"
+    run_case "$(printf '%s\nn\nn\n' "$compositor")"
+    snapshot > "$CASE_DIR/after"
+    cmp "$CASE_DIR/before" "$CASE_DIR/after" || fail 'alternative session repeat changed state'
+    cmp "$CASE_DIR/actions-before" "$CASE_DIR/actions" || fail 'alternative session repeat mutated system'
+done
+
+new_case only_elogind
+echo elogind > "$CASE_DIR/packages"
+ln -s "$CASE_DIR/sv/elogind" "$CASE_DIR/services/elogind"
+snapshot_session_stack > "$CASE_DIR/session-before"
+run_case $'2\nn'
+assert_package wireplumber-elogind
+assert_no_package turnstile
+assert_no_package seatd
+assert_contains "$CASE_DIR/run.log" 'elogind installed=true, elogind enabled=true, seatd enabled=false, turnstiled enabled=false'
+snapshot_session_stack > "$CASE_DIR/session-after"
+cmp "$CASE_DIR/session-before" "$CASE_DIR/session-after" || fail 'changed elogind-only stack'
+
+new_case only_seatd_turnstile
+printf 'seatd\nturnstile\n' > "$CASE_DIR/packages"
+ln -s "$CASE_DIR/sv/seatd" "$CASE_DIR/services/seatd"
+ln -s "$CASE_DIR/sv/turnstiled" "$CASE_DIR/services/turnstiled"
+printf 'manage_rundir = yes\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf"
+snapshot_session_stack > "$CASE_DIR/session-before"
+run_case $'2\nn'
+assert_no_package elogind
+assert_no_package wireplumber-elogind
+assert_contains "$CASE_DIR/run.log" 'elogind installed=false, elogind enabled=false, seatd enabled=true, turnstiled enabled=true'
+snapshot_session_stack > "$CASE_DIR/session-after"
+cmp "$CASE_DIR/session-before" "$CASE_DIR/session-after" || fail 'changed seatd/turnstile-only stack'
+
+# Both enabled: validate manage_rundir without changing/restarting either service.
+for compositor in 2 3; do
+    new_case "elogind_turnstile_safe_$compositor"
+    printf 'elogind\nturnstile\n' > "$CASE_DIR/packages"
+    ln -s "$CASE_DIR/sv/elogind" "$CASE_DIR/services/elogind"
+    ln -s "$CASE_DIR/sv/turnstiled" "$CASE_DIR/services/turnstiled"
+    printf '# user configuration\n  manage_rundir\t=\tno  \ndebug = yes\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf"
+    snapshot_session_stack > "$CASE_DIR/session-before"
+    run_case "$(printf '%s\nn\n' "$compositor")"
+    assert_contains "$CASE_DIR/run.log" 'elogind installed=true, elogind enabled=true, seatd enabled=false, turnstiled enabled=true'
+    assert_contains "$CASE_DIR/run.log" 'turnstile manage_rundir=no confirmed'
+    assert_not_contains "$CASE_DIR/run.log" 'cannot confirm manage_rundir=no'
+    assert_no_package seatd
+    snapshot_session_stack > "$CASE_DIR/session-after"
+    cmp "$CASE_DIR/session-before" "$CASE_DIR/session-after" || fail 'changed compatible coexistence configuration'
+    assert_not_contains "$CASE_DIR/actions" '^sv (down|up)'
+    snapshot > "$CASE_DIR/before"
+    run_case "$(printf '%s\nn\n' "$compositor")"
+    snapshot > "$CASE_DIR/after"
+    cmp "$CASE_DIR/before" "$CASE_DIR/after" || fail 'coexistence repeat changed state'
+done
+
+for config in missing enabled commented duplicate inline invalid dangling oversized; do
+    new_case "elogind_turnstile_uncertain_$config"
+    printf 'elogind\nturnstile\n' > "$CASE_DIR/packages"
+    ln -s "$CASE_DIR/sv/elogind" "$CASE_DIR/services/elogind"
+    ln -s "$CASE_DIR/sv/turnstiled" "$CASE_DIR/services/turnstiled"
+    case "$config" in
+        missing) ;;
+        enabled) printf 'manage_rundir = yes\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf" ;;
+        commented) printf '# manage_rundir = no\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf" ;;
+        duplicate) printf 'manage_rundir = no\nmanage_rundir = yes\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf" ;;
+        inline) printf 'manage_rundir = no # not a valid turnstile boolean\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf" ;;
+        invalid) printf 'manage_rundir = NO\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf" ;;
+        dangling) ln -s /missing/custom-turnstile.conf "$CASE_DIR/etc/turnstile/turnstiled.conf" ;;
+        oversized) printf '%1024smanage_rundir = no\n' '' > "$CASE_DIR/etc/turnstile/turnstiled.conf" ;;
+    esac
+    snapshot_session_stack > "$CASE_DIR/session-before"
+    run_case $'3\nn'
+    assert_package kde-plasma
+    assert_no_package seatd
+    assert_contains "$CASE_DIR/run.log" 'cannot confirm manage_rundir=no'
+    snapshot_session_stack > "$CASE_DIR/session-after"
+    cmp "$CASE_DIR/session-before" "$CASE_DIR/session-after" || fail 'changed uncertain coexistence configuration'
+    assert_not_contains "$CASE_DIR/actions" '^sv (down|up)'
+done
+
+new_case kde_turnstile_safe
+echo turnstile > "$CASE_DIR/packages"
+ln -s "$CASE_DIR/sv/turnstiled" "$CASE_DIR/services/turnstiled"
+printf 'manage_rundir=no\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf"
+run_case $'3\nn'
+assert_package elogind
+assert_package kde-plasma
+assert_link "$CASE_DIR/services/elogind" "$CASE_DIR/sv/elogind"
+assert_link "$CASE_DIR/services/turnstiled" "$CASE_DIR/sv/turnstiled"
+assert_contains "$CASE_DIR/etc/turnstile/turnstiled.conf" '^manage_rundir=no$'
+assert_no_package seatd
+
+new_case kde_turnstile_uncertain
+printf 'elogind\nturnstile\n' > "$CASE_DIR/packages"
+ln -s "$CASE_DIR/sv/turnstiled" "$CASE_DIR/services/turnstiled"
+printf 'manage_rundir=yes\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf"
+snapshot_session_stack > "$CASE_DIR/session-before"
+run_case $'3' apply 1
+assert_no_package kde-plasma
+assert_absent "$CASE_DIR/services/elogind"
+assert_contains "$CASE_DIR/run.log" 'requires manual reconciliation of manage_rundir'
+snapshot_session_stack > "$CASE_DIR/session-after"
+cmp "$CASE_DIR/session-before" "$CASE_DIR/session-after" || fail 'KDE modified an uncertain runtime configuration'
+
+new_case coexistence_dry_run
+printf 'elogind\nturnstile\n' > "$CASE_DIR/packages"
+ln -s "$CASE_DIR/sv/elogind" "$CASE_DIR/services/elogind"
+ln -s "$CASE_DIR/sv/turnstiled" "$CASE_DIR/services/turnstiled"
+printf 'manage_rundir=yes\n' > "$CASE_DIR/etc/turnstile/turnstiled.conf"
+snapshot > "$CASE_DIR/before"
+run_case $'3\nn' direct-dry
+snapshot > "$CASE_DIR/after"
+cmp "$CASE_DIR/before" "$CASE_DIR/after" || fail 'coexistence dry-run changed system'
+[[ ! -s "$CASE_DIR/actions" ]] || fail 'coexistence dry-run executed mutations'
+assert_contains "$CASE_DIR/run.log" 'cannot confirm manage_rundir=no'
 
 # EOF/invalid choices terminate promptly under timeout, never wait forever.
 new_case input_eof

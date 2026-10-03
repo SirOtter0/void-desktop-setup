@@ -42,6 +42,7 @@ APPLICATIONS_DIR="${VDS_APPLICATIONS_DIR:-/usr/share/applications}"
 ALSA_CONF_DIR="${VDS_ALSA_CONF_DIR:-/etc/alsa/conf.d}"
 ALSA_SHARE_DIR="${VDS_ALSA_SHARE_DIR:-/usr/share/alsa/alsa.conf.d}"
 PIPEWIRE_SYSTEM_DIR="${VDS_PIPEWIRE_SYSTEM_DIR:-/etc/pipewire}"
+TURNSTILE_CONF="${VDS_TURNSTILE_CONF:-/etc/turnstile/turnstiled.conf}"
 XBPS_SYSTEM_REPO_DIR="${VDS_XBPS_SYSTEM_REPO_DIR:-/usr/share/xbps.d}"
 GREETD_CONF="${VDS_GREETD_CONF:-/etc/greetd/config.toml}"
 BACKGROUND_DIR="${VDS_BACKGROUND_DIR:-/usr/share/backgrounds}"
@@ -642,14 +643,47 @@ select_shells() {
     fi
 }
 
+turnstile_rundir_disabled() {
+    [[ -f "$TURNSTILE_CONF" && -r "$TURNSTILE_CONF" ]] || return 1
+    # Require one unambiguous assignment. turnstile accepts case-sensitive yes/no;
+    # inline comments are not boolean values. Never edit the user's configuration.
+    awk '
+        /^[[:space:]]*#/ { next }
+        length($0) > 1022 { uncertain = 1 }
+        /^[[:space:]]*manage_rundir[[:space:]]*=/ {
+            assignments++
+            if ($0 ~ /^[[:space:]]*manage_rundir[[:space:]]*=[[:space:]]*no[[:space:]]*$/)
+                disabled++
+        }
+        END { exit !(assignments == 1 && disabled == 1 && !uncertain) }
+    ' "$TURNSTILE_CONF"
+}
+
 configure_session_management() {
-    # elogind supplies seats, PAM sessions and XDG_RUNTIME_DIR; no seatd is needed.
-    # Preserve an existing seatd/turnstile stack for standalone compositors.
-    if ! service_enabled elogind && { service_enabled seatd || service_enabled turnstiled; }; then
-        if $WANTS_KDE || xbps-query -p pkgver elogind >/dev/null 2>&1; then
-            log_error "→ KDE/installed elogind and existing seatd/turnstile setup requires manual reconciliation before rerunning"
-            exit 1
+    local elogind_installed=false elogind_enabled=false
+    local seatd_enabled=false turnstile_enabled=false
+    if xbps-query -p pkgver elogind >/dev/null 2>&1; then elogind_installed=true; fi
+    if service_enabled elogind; then elogind_enabled=true; fi
+    if service_enabled seatd; then seatd_enabled=true; fi
+    if service_enabled turnstiled; then turnstile_enabled=true; fi
+    log_info "→ Session state: elogind installed=$elogind_installed, elogind enabled=$elogind_enabled, seatd enabled=$seatd_enabled, turnstiled enabled=$turnstile_enabled"
+
+    # turnstile can coexist with elogind, but only one should manage the rundir.
+    if $turnstile_enabled && { $elogind_enabled || $WANTS_KDE; }; then
+        if turnstile_rundir_disabled; then
+            log_info "→ turnstile manage_rundir=no confirmed in $TURNSTILE_CONF; configuration preserved"
+        else
+            log_warn "→ elogind + turnstile: cannot confirm manage_rundir=no in $TURNSTILE_CONF; runtime directories may conflict."
+            log_warn "→ Se conserva la configuración y los servicios; revisa manage_rundir=no manualmente antes de iniciar sesión."
+            if ! $elogind_enabled && $WANTS_KDE; then
+                log_error "→ KDE needs elogind; enabling it alongside turnstile requires manual reconciliation of manage_rundir before rerunning"
+                exit 1
+            fi
         fi
+    fi
+
+    if ! $elogind_enabled && ! $WANTS_KDE && { $seatd_enabled || $turnstile_enabled; }; then
+        # Merely installing elogind does not select it over an existing stack.
         install_packages seatd turnstile
         SESSION_SERVICES=(seatd turnstiled)
         add_user_group _seatd
@@ -658,8 +692,9 @@ configure_session_management() {
     else
         install_packages elogind wireplumber-elogind
         SESSION_SERVICES=(elogind)
-        if service_enabled seatd || service_enabled turnstiled; then
-            log_warn "→ Existing parallel seat/session services; review seatd/turnstile and elogind configuration manually"
+        if $seatd_enabled; then
+            log_info "→ Existing seatd preserved; it manages seats separately from turnstile session/runtime management"
+            add_user_group _seatd
         fi
     fi
 }
