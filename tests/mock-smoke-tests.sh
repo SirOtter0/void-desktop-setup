@@ -95,7 +95,7 @@ EOS
 #!/usr/bin/env bash
 printf 'chown %s\n' "$*" >> "$MOCK_ROOT/actions"
 EOS
-    for svc in niri qs noctalia-greeter; do
+    for svc in niri noctalia noctalia-greeter-session; do
         printf '#!/usr/bin/env bash\nexit 0\n' > "$CASE_DIR/bin/$svc"
     done
     chmod +x "$CASE_DIR/bin"/*
@@ -236,7 +236,7 @@ run_case $'4 1 2\ny\nn'
 for pkg in mesa-dri vulkan-loader mesa-vulkan-radeon mesa-vaapi linux-firmware-amd kde-plasma niri sway noctalia xdg-desktop-portal-gnome xdg-desktop-portal-wlr xdg-desktop-portal-kde xdg-desktop-portal-gtk; do assert_package "$pkg"; done
 [[ "$(grep -cx niri "$CASE_DIR/packages")" == 1 ]] || fail 'duplicate niri'
 assert_contains "$CASE_DIR/home/.config/niri/config.kdl" '^spawn-at-startup "pipewire"$'
-assert_contains "$CASE_DIR/home/.config/niri/config.kdl" '^spawn-at-startup "qs" "-c" "noctalia-shell"$'
+assert_contains "$CASE_DIR/home/.config/niri/config.kdl" '^spawn-at-startup "noctalia" "--daemon"$'
 assert_contains "$CASE_DIR/home/.config/niri/config.kdl" 'XCURSOR_SIZE "24"'
 assert_contains "$CASE_DIR/home/.config/xdg-desktop-portal/niri-portals.conf" 'FileChooser=gtk;'
 assert_contains "$CASE_DIR/home/.config/xdg-desktop-portal/niri-portals.conf" 'Secret=gnome-keyring;'
@@ -439,7 +439,6 @@ assert_contains "$CASE_DIR/actions" 'sv up .*/dhcpcd$'
 assert_contains "$CASE_DIR/run.log" 'restoring previous network service links'
 
 new_case noctalia_reject
-MISSING_CMDS=qs
 run_case $'1\nn\nn'
 assert_package niri
 assert_no_package noctalia
@@ -447,12 +446,41 @@ assert_no_package greetd
 assert_absent "$CASE_DIR/etc/voiders.conf"
 assert_contains "$CASE_DIR/run.log" 'NOT maintained by Void Linux'
 assert_contains "$CASE_DIR/home/.config/niri/config.kdl" 'spawn-at-startup "pipewire"'
-assert_not_contains "$CASE_DIR/home/.config/niri/config.kdl" 'noctalia-shell'
-new_case noctalia_accept_no_qs
-MISSING_CMDS=qs
+assert_not_contains "$CASE_DIR/home/.config/niri/config.kdl" 'spawn-at-startup "noctalia"'
+new_case noctalia_accept
 run_case $'1\ny\nn'
 assert_package noctalia
-assert_not_contains "$CASE_DIR/home/.config/niri/config.kdl" 'noctalia-shell'
+assert_contains "$CASE_DIR/home/.config/niri/config.kdl" '^spawn-at-startup "noctalia" "--daemon"$'
+assert_contains "$CASE_DIR/etc/greetd.toml" '^command = ".*/noctalia-greeter-session"$'
+assert_contains "$CASE_DIR/etc/greetd.toml" '^user = "_greeter"$'
+assert_contains "$CASE_DIR/run.log" 'Noctalia Greeter configured'
+assert_link "$CASE_DIR/services/greetd" "$CASE_DIR/sv/greetd"
+new_case stock_greetd
+cat > "$CASE_DIR/etc/greetd.toml" <<'EOF_STOCK_GREETD'
+[terminal]
+# Packaged greetd default
+vt = 7
+
+[default_session]
+command = "agreety --cmd /bin/sh"
+user = "_greeter"
+EOF_STOCK_GREETD
+cp "$CASE_DIR/etc/greetd.toml" "$CASE_DIR/stock-original"
+run_case $'1\ny\nn'
+cmp "$CASE_DIR/stock-original" "$CASE_DIR/etc/greetd.toml.void-desktop-setup.bak" || fail 'stock greetd backup differs'
+assert_contains "$CASE_DIR/etc/greetd.toml" '^command = ".*/noctalia-greeter-session"$'
+assert_link "$CASE_DIR/services/greetd" "$CASE_DIR/sv/greetd"
+snapshot > "$CASE_DIR/before"
+run_case $'1\nn'
+snapshot > "$CASE_DIR/after"
+cmp "$CASE_DIR/before" "$CASE_DIR/after" || fail 'stock greetd repeat changed files'
+new_case custom_greetd
+printf '[default_session]\ncommand = "custom-greeter"\nuser = "_greeter"\n' > "$CASE_DIR/etc/greetd.toml"
+run_case $'1\ny\nn'
+assert_contains "$CASE_DIR/run.log" 'Existing greetd configuration preserved'
+assert_contains "$CASE_DIR/run.log" 'greeter integration requires manual validation'
+assert_absent "$CASE_DIR/services/greetd"
+assert_absent "$CASE_DIR/etc/greetd.toml.void-desktop-setup.bak"
 new_case noctalia_existing_repo
 printf '# existing\nrepository=https://repo.voiders.dev\n' > "$CASE_DIR/etc/other.conf"
 run_case $'1\nn'
@@ -544,10 +572,10 @@ assert_absent "$CASE_DIR/home/.config/pipewire/pipewire.conf.d/10-wireplumber.co
 assert_contains "$CASE_DIR/run.log" 'Missing package example'
 assert_not_contains "$CASE_DIR/home/.config/sway/config" '^exec pipewire$'
 new_case missing_greeter
-MISSING_CMDS=noctalia-greeter
+MISSING_CMDS=noctalia-greeter-session
 run_case $'1\ny\nn'
 assert_absent "$CASE_DIR/etc/greetd.toml"
-assert_contains "$CASE_DIR/run.log" 'binary not found'
+assert_contains "$CASE_DIR/run.log" 'noctalia-greeter-session not found'
 assert_absent "$CASE_DIR/services/greetd"
 new_case repo_system_existing
 printf 'repository=https://repo.voiders.dev\n' > "$CASE_DIR/system-repos/community.conf"
