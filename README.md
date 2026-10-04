@@ -12,6 +12,7 @@ Minimal, interactive post-installation script for Void Linux with selectable des
 
 - Void Linux, internet access, root execution and a non-root desktop user.
 - An interactive terminal (`/dev/tty`), including for dry runs and confirmations.
+- Current XBPS on older installation images (`sudo xbps-install -Su xbps` if XBPS requests an update).
 - Review the script before running it. Configuration and network migrations may need manual reconciliation.
 
 ```bash
@@ -114,13 +115,13 @@ Downloads finish before migration. Only service symlinks are removed, after `sv 
 
 Conflict detection covers enabled entries in `/var/service`, not independently launched daemons, custom service names or scripts in `rc.local`. Check those manually. NetworkManager's D-Bus-managed supplicant is distinct from a separately enabled `wpa_supplicant` runit service. No existing connection settings are converted automatically.
 
-Other global services enabled when present are `dbus`, the chosen session manager, `bluetoothd`, `accounts-daemon`, and `greetd` only for accepted Noctalia with an available greeter binary. Missing services, custom service entries and existing runit `down` flags are reported and preserved.
+Other global services enabled when present are `dbus`, the chosen session manager, `bluetoothd`, `accounts-daemon`, and `greetd` only after its Noctalia session is configured. Missing services, custom service entries and existing runit `down` flags are reported and preserved.
 
 ### Configuration preservation and dry run
 
-Existing files, custom symlinks (including dangling links), wallpapers and service entries are preserved. Identical files and expected symlinks are reused. New user configuration directories/files belong to the desktop user; existing trees are not recursively chowned. Installed packages are skipped. Previously created `.void-desktop-setup.bak` files remain untouched; the script no longer replaces files or makes new replacement backups.
+Existing files, custom symlinks (including dangling links), wallpapers and service entries are preserved. Identical files and expected symlinks are reused. New user configuration directories/files belong to the desktop user; existing trees are not recursively chowned. Installed packages are skipped. The sole exception is greetd's recognized, unmodified `agreety --cmd /bin/sh` default: when Noctalia is selected, it is backed up once as `config.toml.void-desktop-setup.bak` and replaced with a `noctalia-greeter-session` entry. A custom greetd file or an existing backup prevents automatic migration, with a warning and no new greetd service activation.
 
-The minimal new Niri configuration retains keyboard layout `es` and the Kitty/Fuzzel shortcuts. Quickshell/Noctalia startup is added only when Noctalia was accepted and `qs` is available. Wallpaper and greetd files are created only when absent and applicable.
+The minimal new Niri configuration retains keyboard layout `es` and the Kitty/Fuzzel shortcuts. Accepted Noctalia starts with `noctalia --daemon` when its binary is available. The greeter uses the installed `noctalia-greeter-session` wrapper and an existing `_greeter` or `greeter` account. Its state directory and new `greeter.toml` are created with that account's ownership. Existing custom greeter settings remain untouched.
 
 ```bash
 sudo ./void-desktop-setup.sh --dry-run
@@ -138,13 +139,13 @@ shellcheck void-desktop-setup.sh tests/mock-smoke-tests.sh  # when installed
 
 The mock harness runs package, group and service commands as mocks, and real file operations only in temporary directories. Apply runs source the actual script and replace platform preflight checks; direct and stdin-fed dry runs exercise its normal entrypoint, including the executable bit and piped installation path. Scenarios cover Intel/AMD, multiple NVIDIA generations, unknown/mixed GPUs, each desktop, audio/Bluetooth/Vulkan, session alternatives, network consent/conflicts/failure, Noctalia consent/reuse, custom files/links, repeated execution and dry-run snapshots. Input paths have timeouts so missing input cannot hang the suite.
 
-**No VM or real hardware validation is claimed.** Before merging, validate on Void:
+The Niri + Noctalia path was installed in a Void live QEMU VM on 2026-10-04; Niri's generated configuration passed `niri validate`. Graphical login and hardware-dependent behavior remain to be checked:
 
 - XBPS availability for the target architecture/libc; NVIDIA DKMS against the actual kernel/headers, DRM/KMS and RTX 4060 Ti login. NVIDIA's nonfree packages are architecture/libc limited.
 - Niri/Sway/Plasma login, seat permissions, D-Bus activation, runtime directories and portal file dialogs/screensharing.
 - `wpctl status`; `pactl info` (install `pulseaudio-utils` for `pactl`); ALSA application audio; Bluetooth pairing and headset playback/microphone/profile switching.
 - Network migration, Wi-Fi credentials, reconnect behavior and restart/reboot persistence, using a local console.
-- Third-party Noctalia package layout, greeter user/permissions, Quickshell configuration and session entries. The greeter settings are retained from this project's original integration, not verified against real community packages.
+- Third-party Noctalia package layout, greeter user/permissions and session entries after a reboot on an installed Void system.
 
 Nouveau fallback does not remove existing NVIDIA packages/blacklists or guarantee Vulkan support. Legacy drivers may fail with current kernels and do not imply compatibility with every selected Wayland compositor. Preserved custom configuration can require manual integration even when the script completes.
 
@@ -153,6 +154,7 @@ Nouveau fallback does not remove existing NVIDIA packages/blacklists or guarante
 - Void Handbook: [NVIDIA](https://docs.voidlinux.org/config/graphical-session/graphics-drivers/nvidia.html), [AMD](https://docs.voidlinux.org/config/graphical-session/graphics-drivers/amd.html), [Intel](https://docs.voidlinux.org/config/graphical-session/graphics-drivers/intel.html).
 - Void Handbook: [PipeWire](https://docs.voidlinux.org/config/media/pipewire.html), [Bluetooth](https://docs.voidlinux.org/config/bluetooth.html), [session/seat management](https://docs.voidlinux.org/config/session-management.html), [Wayland](https://docs.voidlinux.org/config/graphical-session/wayland.html).
 - Void Handbook: [NetworkManager](https://docs.voidlinux.org/config/network/networkmanager.html), [portals](https://docs.voidlinux.org/config/graphical-session/portals.html), [KDE](https://docs.voidlinux.org/config/graphical-session/kde.html).
+- Noctalia Greeter: [installation](https://github.com/noctalia-dev/noctalia-greeter/blob/main/docs/user/installation.md) and [packaging](https://github.com/noctalia-dev/noctalia-greeter/blob/main/PACKAGING.md).
 - Void Handbook: [XBPS repositories](https://docs.voidlinux.org/xbps/repositories/index.html), [configuration precedence / changing mirrors](https://docs.voidlinux.org/xbps/repositories/mirrors/changing.html).
 - Official [Void package templates](https://github.com/void-linux/void-packages/tree/818cc6ea4ef4b9667e430270adc1451874053e11/srcpkgs) checked for current package names/subpackages, services and examples.
 - Niri: [important software / portals](https://niri-wm.github.io/niri/Important-Software.html), [session startup](https://niri-wm.github.io/niri/Getting-Started.html), [portal defaults](https://github.com/niri-wm/niri/blob/main/resources/niri-portals.conf).
@@ -170,7 +172,7 @@ Script minimalista e interactivo de post-instalación de Void Linux: Niri + Noct
 
 ### Requisitos e instalación
 
-Necesitas Void Linux, internet, ejecución como root, un usuario de escritorio no-root y terminal interactiva (`/dev/tty`), también para simulaciones y confirmaciones. Revisa el script antes de ejecutarlo.
+Necesitas Void Linux, internet, ejecución como root, un usuario de escritorio no-root y terminal interactiva (`/dev/tty`), también para simulaciones y confirmaciones. En imágenes antiguas, actualiza XBPS con `sudo xbps-install -Su xbps` si el gestor lo exige. Revisa el script antes de ejecutarlo.
 
 ```bash
 git clone https://github.com/SirOtter0/void-desktop-setup.git
@@ -272,13 +274,13 @@ Las descargas terminan antes de migrar. Solo se eliminan enlaces de servicio tra
 
 La detección cubre `/var/service`: no detecta daemons lanzados por separado, nombres de servicio personalizados ni scripts de `rc.local`. Revísalos manualmente. El supplicant gestionado por NetworkManager vía D-Bus es distinto de un servicio runit `wpa_supplicant` independiente. No se convierten automáticamente credenciales/configuraciones de conexión.
 
-Los demás servicios globales son `dbus`, el gestor de sesiones elegido, `bluetoothd`, `accounts-daemon` y `greetd` solo si se acepta Noctalia y existe su binario greeter. Se informan y conservan servicios ausentes, entradas personalizadas y archivos runit `down` existentes.
+Los demás servicios globales son `dbus`, el gestor de sesiones elegido, `bluetoothd`, `accounts-daemon` y `greetd` solo tras configurar su sesión de Noctalia. Se informan y conservan servicios ausentes, entradas personalizadas y archivos runit `down` existentes.
 
 ### Preservación, idempotencia y simulación
 
-Se conservan archivos, enlaces personalizados (incluidos los rotos), wallpapers y entradas de servicio. Los archivos idénticos y enlaces esperados se reutilizan. Los nuevos archivos/directorios de usuario pertenecen al usuario de escritorio; no se hace `chown` recursivo de árboles existentes. Se omiten paquetes ya instalados. Los backups antiguos `.void-desktop-setup.bak` quedan intactos; ya no se reemplazan archivos ni se crean nuevos backups para reemplazarlos.
+Se conservan archivos, enlaces personalizados (incluidos los rotos), wallpapers y entradas de servicio. Los archivos idénticos y enlaces esperados se reutilizan. Los nuevos archivos/directorios de usuario pertenecen al usuario de escritorio; no se hace `chown` recursivo de árboles existentes. Se omiten paquetes ya instalados. La única excepción es la configuración predeterminada reconocible de greetd (`agreety --cmd /bin/sh`): al elegir Noctalia, se guarda una copia única `config.toml.void-desktop-setup.bak` y se configura `noctalia-greeter-session`. Una configuración personalizada o una copia ya existente impiden la migración automática; se avisa y no se activa un servicio greetd nuevo.
 
-La configuración mínima nueva de Niri mantiene teclado `es` y atajos Kitty/Fuzzel. Solo añade el arranque Quickshell/Noctalia cuando se acepta Noctalia y existe `qs`. Wallpaper y archivos greetd se crean únicamente cuando no existen y corresponde configurarlos.
+La configuración mínima nueva de Niri mantiene teclado `es` y atajos Kitty/Fuzzel. Al aceptar Noctalia, se arranca con `noctalia --daemon` si existe el binario. El greeter utiliza `noctalia-greeter-session` y una cuenta `_greeter` o `greeter` existente. El directorio de estado y el nuevo `greeter.toml` se crean con su propietario; las configuraciones personalizadas se conservan.
 
 ```bash
 sudo ./void-desktop-setup.sh --dry-run
@@ -296,13 +298,13 @@ shellcheck void-desktop-setup.sh tests/mock-smoke-tests.sh  # si está instalado
 
 El harness simula paquetes, grupos y servicios; las operaciones reales de archivos quedan en directorios temporales. Las ejecuciones de aplicación cargan el script real y sustituyen las comprobaciones de plataforma; los dry runs directos y por entrada estándar prueban la entrada normal, incluido el permiso de ejecución y la instalación canalizada. Se cubren Intel/AMD, generaciones NVIDIA, GPU desconocidas/mezcladas, cada escritorio, audio/Bluetooth/Vulkan, alternativas de sesión, red/conflictos/consentimiento/fallos, Noctalia, configuraciones/enlaces personalizados, segunda ejecución y snapshots de dry run. Las entradas tienen timeout para evitar bloqueos.
 
-**No se afirma validación en VM ni hardware real.** Antes del merge, comprueba en Void:
+La ruta Niri + Noctalia se instaló en una VM live de Void con QEMU el 2026-10-04 y la configuración generada pasó `niri validate`. Aún hay que comprobar el inicio gráfico y el comportamiento dependiente del hardware:
 
 - Paquetes XBPS para arquitectura/libc objetivo; DKMS NVIDIA con kernel/headers reales, DRM/KMS y login en RTX 4060 Ti. Los paquetes NVIDIA nonfree tienen restricciones de arquitectura/libc.
 - Login Niri/Sway/Plasma, permisos del seat, D-Bus, runtime y diálogos/screencasting de portales.
 - `wpctl status`, `pactl info` (`pactl` requiere `pulseaudio-utils`), aplicaciones ALSA, emparejamiento Bluetooth y reproducción/micrófono/cambio de perfiles de auriculares.
 - Migración de red, credenciales Wi-Fi, reconexión y persistencia tras reiniciar, desde consola local.
-- Paquetes Noctalia de terceros, usuario/permisos del greeter, configuración Quickshell y entradas de sesión. Se conserva la integración greeter original del proyecto; no se ha verificado con paquetes comunitarios reales.
+- Paquetes Noctalia de terceros, usuario/permisos del greeter y entradas de sesión tras reiniciar un Void instalado en disco.
 
 El fallback Nouveau no elimina paquetes NVIDIA/blacklists anteriores ni garantiza Vulkan. Los drivers legacy pueden fallar con kernels recientes y no garantizan compatibilidad con todos los compositores Wayland. Conservar configuración personalizada puede requerir integración manual aunque el script termine.
 

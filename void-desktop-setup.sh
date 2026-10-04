@@ -58,6 +58,7 @@ WANTS_SWAY=false
 WANTS_KDE=false
 NETWORKMANAGER_SELECTED=false
 NOCTALIA_READY=false
+GREETER_CONFIGURED=false
 NVIDIA_DRIVER=""
 SESSION_SERVICES=()
 AUDIO_AUTOSTART=true
@@ -853,11 +854,11 @@ configure_network() {
 }
 
 enable_core_services() {
-    log_step "[6/8] Enabling services / Activando servicios..."
+    log_step "[7/8] Enabling services / Activando servicios..."
 
     local services=(dbus "${SESSION_SERVICES[@]}" bluetoothd)
 
-    if $WANTS_NOCTALIA && have_cmd noctalia-greeter; then
+    if $GREETER_CONFIGURED; then
         services+=(greetd)
     fi
 
@@ -880,12 +881,41 @@ enable_core_services() {
     fi
 }
 
+is_stock_greetd_config() {
+    [[ -f "$GREETD_CONF" && ! -L "$GREETD_CONF" ]] || return 1
+    awk '
+        /^[[:space:]]*(#|$)/ { next }
+        /^[[:space:]]*\[terminal\][[:space:]]*$/ { section = "terminal"; next }
+        /^[[:space:]]*\[default_session\][[:space:]]*$/ { section = "session"; next }
+        section == "terminal" && /^[[:space:]]*vt[[:space:]]*=[[:space:]]*([0-9]+|"(next|current)")[[:space:]]*$/ { next }
+        section == "session" && /^[[:space:]]*command[[:space:]]*=[[:space:]]*"agreety --cmd \/bin\/sh"[[:space:]]*$/ { command++; next }
+        section == "session" && /^[[:space:]]*user[[:space:]]*=[[:space:]]*"_greeter"[[:space:]]*$/ { user++; next }
+        { unexpected = 1 }
+        END { exit !(command == 1 && user == 1 && !unexpected) }
+    ' "$GREETD_CONF"
+}
+
+greetd_uses_noctalia() {
+    local session_bin="$1" greeter_user="$2"
+    [[ -f "$GREETD_CONF" && ! -L "$GREETD_CONF" ]] || return 1
+    awk -v expected_command="$session_bin" -v expected_user="$greeter_user" '
+        /^[[:space:]]*\[/ { section = $0; next }
+        section ~ /^[[:space:]]*\[default_session\]/ && /^[[:space:]]*(command|user)[[:space:]]*=/ {
+            key = $0; sub(/[[:space:]]*=.*/, "", key); gsub(/[[:space:]]/, "", key)
+            value = $0; sub(/^[^=]*=[[:space:]]*"/, "", value); sub(/"[[:space:]]*$/, "", value)
+            if (key == "command") { command = value; command_count++ }
+            if (key == "user") { user = value; user_count++ }
+        }
+        END { exit !(command_count == 1 && user_count == 1 && command == expected_command && user == expected_user) }
+    ' "$GREETD_CONF"
+}
+
 configure_noctalia_assets() {
     if ! $WANTS_NOCTALIA || ! $NOCTALIA_READY; then
         return 0
     fi
 
-    log_step "[7/8] Configuring Noctalia Greeter assets / Configurando recursos de Noctalia Greeter..."
+    log_step "[6/8] Configuring Noctalia Greeter assets / Configurando recursos de Noctalia Greeter..."
 
     local wallpaper_path="$BACKGROUND_DIR/void-desktop-setup-default.jpg"
     if [[ -f "$SCRIPT_DIR/void-desktop-setup-default.jpg" ]]; then
@@ -901,18 +931,54 @@ configure_noctalia_assets() {
         log_warn "→ Local wallpaper not found; skipping copy / wallpaper local no encontrado"
     fi
 
-    if have_cmd noctalia-greeter; then
-        write_file "$GREETD_CONF" <<'EOF_GREETD'
-[terminal]
-vt = 1
+    if ! have_cmd noctalia-greeter-session; then
+        log_warn "→ noctalia-greeter-session not found; greetd integration skipped"
+        return 0
+    fi
 
-[default_session]
-command = "noctalia-greeter"
-user = "greeter"
-EOF_GREETD
+    local session_bin greeter_user
+    session_bin="$(command -v noctalia-greeter-session)"
+    if getent passwd _greeter >/dev/null 2>&1; then
+        greeter_user=_greeter
+    elif getent passwd greeter >/dev/null 2>&1; then
+        greeter_user=greeter
+    else
+        log_warn "→ No greetd session user found; configure Noctalia Greeter manually"
+        return 0
+    fi
 
-        if [[ -d "$NOCTALIA_GREETER_DIR" || $DRY_RUN == true ]]; then
-            write_file "$NOCTALIA_GREETER_DIR/greeter.toml" <<'EOF_GREETER'
+    if is_stock_greetd_config; then
+        local backup="${GREETD_CONF}.void-desktop-setup.bak"
+        if [[ -e "$backup" || -L "$backup" ]]; then
+            log_warn "→ Existing greetd backup $backup; preserving $GREETD_CONF for manual review"
+            return 0
+        fi
+        run_cmd cp -p -- "$GREETD_CONF" "$backup"
+        if ! $DRY_RUN; then
+            # The packaged agreety default is the only existing file we migrate.
+            printf '[terminal]\nvt = 1\n\n[default_session]\ncommand = "%s"\nuser = "%s"\n' "$session_bin" "$greeter_user" > "$GREETD_CONF"
+        else
+            echo "[dry-run] replace packaged greetd default: $GREETD_CONF"
+        fi
+    elif [[ ! -e "$GREETD_CONF" && ! -L "$GREETD_CONF" ]]; then
+        if ! $DRY_RUN; then
+            make_parent_dir "$GREETD_CONF"
+            printf '[terminal]\nvt = 1\n\n[default_session]\ncommand = "%s"\nuser = "%s"\n' "$session_bin" "$greeter_user" > "$GREETD_CONF"
+        else
+            echo "[dry-run] write $GREETD_CONF"
+        fi
+    elif ! greetd_uses_noctalia "$session_bin" "$greeter_user"; then
+        log_warn "→ Existing greetd configuration preserved; point its default session at $session_bin (user $greeter_user) manually"
+        return 0
+    fi
+
+    if [[ ! -d "$NOCTALIA_GREETER_DIR" ]]; then
+        run_cmd mkdir -p "$NOCTALIA_GREETER_DIR"
+        run_cmd chown "$greeter_user:" "$NOCTALIA_GREETER_DIR"
+        run_cmd chmod 0750 "$NOCTALIA_GREETER_DIR"
+    fi
+    if [[ ! -e "$NOCTALIA_GREETER_DIR/greeter.toml" && ! -L "$NOCTALIA_GREETER_DIR/greeter.toml" ]]; then
+        write_file "$NOCTALIA_GREETER_DIR/greeter.toml" <<'EOF_GREETER'
 [appearance]
 scheme = "Synced"
 theme_mode = "dark"
@@ -921,16 +987,12 @@ theme_mode = "dark"
 path = "/usr/share/backgrounds/void-desktop-setup-default.jpg"
 fill_mode = "cover"
 EOF_GREETER
-            log_ok "→ Noctalia Greeter files configured / archivos configurados"
-        else
-            log_warn "→ Noctalia greeter directory missing; review package layout manually"
-            log_warn "→ Falta directorio de Noctalia greeter; revisa el paquete manualmente"
-        fi
-    else
-        NOCTALIA_READY=false
-        log_warn "→ noctalia-greeter binary not found; greetd not auto-configured"
-        log_warn "→ binario noctalia-greeter no encontrado; greetd no se configuró automáticamente"
+        run_cmd chown "$greeter_user:" "$NOCTALIA_GREETER_DIR/greeter.toml"
+        run_cmd chmod 0640 "$NOCTALIA_GREETER_DIR/greeter.toml"
     fi
+
+    GREETER_CONFIGURED=true
+    log_ok "→ Noctalia Greeter greetd session configured / sesión greetd configurada"
 }
 
 append_session_startup() {
@@ -950,14 +1012,14 @@ configure_shell_files() {
         if [[ -e "$niri_cfg" || -L "$niri_cfg" ]]; then
             log_warn "→ Preserving existing Niri configuration: $niri_cfg; ensure user-session PipeWire startup manually"
         else
-            if $WANTS_NOCTALIA && have_cmd qs; then
+            if $WANTS_NOCTALIA && have_cmd noctalia; then
                 write_file "$niri_cfg" <<'EOF_NIRI_QS'
 // Niri - Minimal default config
 environment {
     XCURSOR_SIZE "24"
 }
 
-spawn-at-startup "qs" "-c" "noctalia-shell"
+spawn-at-startup "noctalia" "--daemon"
 
 input {
     keyboard {
@@ -994,8 +1056,8 @@ binds {
     Mod+Shift+E { spawn "fuzzel"; }
 }
 EOF_NIRI
-                log_info "→ Niri config created without Noctalia auto-start (declined or qs unavailable)"
-                log_info "→ Configuración Niri creada sin auto-inicio Noctalia (rechazado o qs no disponible)"
+                log_info "→ Niri config created without Noctalia auto-start (declined or binary unavailable)"
+                log_info "→ Configuración Niri creada sin auto-inicio Noctalia (rechazado o binario no disponible)"
             fi
 
             if $AUDIO_AUTOSTART; then
@@ -1046,7 +1108,7 @@ print_summary() {
         echo "  ✓ KDE Plasma selected / KDE Plasma seleccionado"
     fi
 
-    if $WANTS_NOCTALIA && $NOCTALIA_READY; then
+    if $WANTS_NOCTALIA && $GREETER_CONFIGURED; then
         echo "  ✓ Noctalia Greeter configured / Noctalia Greeter configurado"
     elif $WANTS_NOCTALIA; then
         echo "  ⚠ Noctalia selected but greeter integration requires manual validation"
@@ -1097,8 +1159,8 @@ main() {
     select_shells
     install_essentials
     configure_network
-    enable_core_services
     configure_noctalia_assets
+    enable_core_services
     configure_shell_files
     print_summary
 }
