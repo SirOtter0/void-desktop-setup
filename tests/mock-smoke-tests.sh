@@ -18,7 +18,8 @@ assert_no_package() { assert_not_contains "$CASE_DIR/packages" "^$1$"; }
 
 new_case() {
     CASE_DIR="$TMP_ROOT/$1"
-    mkdir -p "$CASE_DIR"/{bin,sv,services,home,etc,backgrounds,noctalia-greeter,applications,system-repos}
+    mkdir -p "$CASE_DIR"/{bin,sv,services,home,etc,backgrounds,noctalia-greeter,applications,system-repos,sessions,system-sessions}
+    printf '[Desktop Entry]\nName=Niri\nExec=/usr/bin/niri --session\nType=Application\nDesktopNames=niri\n' > "$CASE_DIR/system-sessions/niri.desktop"
     mkdir -p "$CASE_DIR/examples"/{pipewire,wireplumber} "$CASE_DIR/alsa-share" "$CASE_DIR/etc/alsa" "$CASE_DIR/etc/pipewire" "$CASE_DIR/etc/turnstile"
     local svc
     # Audio service dirs deliberately exist: the script must never enable them.
@@ -144,6 +145,7 @@ run_case() {
         VDS_XBPS_REPO_CONF="$CASE_DIR/etc/voiders.conf" VDS_XBPS_SYSTEM_REPO_DIR="$CASE_DIR/system-repos" \
         VDS_NVIDIA_MODPROBE_CONF="$CASE_DIR/etc/nvidia.conf" VDS_INTEL_PROFILE_CONF="$CASE_DIR/etc/intel.sh" \
         VDS_GREETD_CONF="$CASE_DIR/etc/greetd.toml" VDS_BACKGROUND_DIR="$CASE_DIR/backgrounds" \
+        VDS_WAYLAND_SESSIONS_DIR="$CASE_DIR/sessions" VDS_SYSTEM_WAYLAND_SESSIONS_DIR="$CASE_DIR/system-sessions" \
         VDS_NOCTALIA_GREETER_DIR="$CASE_DIR/noctalia-greeter" VDS_EXAMPLES_DIR="$CASE_DIR/examples" \
         VDS_APPLICATIONS_DIR="$CASE_DIR/applications" VDS_ALSA_SHARE_DIR="$CASE_DIR/alsa-share" \
         VDS_ALSA_CONF_DIR="$CASE_DIR/etc/alsa" VDS_PIPEWIRE_SYSTEM_DIR="$CASE_DIR/etc/pipewire" \
@@ -450,11 +452,22 @@ assert_not_contains "$CASE_DIR/home/.config/niri/config.kdl" 'spawn-at-startup "
 new_case noctalia_accept
 run_case $'1\ny\nn'
 assert_package noctalia
+assert_package dejavu-fonts-ttf
+assert_contains "$CASE_DIR/sessions/niri.desktop" '^Exec=dbus-run-session /usr/bin/niri --session$'
 assert_contains "$CASE_DIR/home/.config/niri/config.kdl" '^spawn-at-startup "noctalia" "--daemon"$'
 assert_contains "$CASE_DIR/etc/greetd.toml" '^command = ".*/noctalia-greeter-session"$'
 assert_contains "$CASE_DIR/etc/greetd.toml" '^user = "_greeter"$'
 assert_contains "$CASE_DIR/run.log" 'Noctalia Greeter configured'
 assert_link "$CASE_DIR/services/greetd" "$CASE_DIR/sv/greetd"
+new_case custom_local_niri_session
+printf '[Desktop Entry]\nName=Niri\nExec=my-niri-session\n' > "$CASE_DIR/sessions/niri.desktop"
+run_case $'1\ny\nn'
+assert_contains "$CASE_DIR/sessions/niri.desktop" '^Exec=my-niri-session$'
+new_case custom_packaged_niri_session
+printf '[Desktop Entry]\nName=Niri\nExec=my-niri-session\n' > "$CASE_DIR/system-sessions/niri.desktop"
+run_case $'1\ny\nn'
+assert_absent "$CASE_DIR/sessions/niri.desktop"
+assert_contains "$CASE_DIR/run.log" 'Custom or missing Niri session preserved'
 new_case stock_greetd
 cat > "$CASE_DIR/etc/greetd.toml" <<'EOF_STOCK_GREETD'
 [terminal]
