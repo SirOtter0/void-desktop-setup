@@ -914,12 +914,53 @@ greetd_uses_noctalia() {
     ' "$GREETD_CONF"
 }
 
+configure_noctalia_wallpaper() {
+    local wallpaper_path="$1" config_dir="$CURRENT_HOME/.config/noctalia"
+    local existing
+    # Noctalia's GUI state overrides hand-written TOML. Seed a fresh profile only.
+    for existing in "$config_dir"/*.toml "$config_dir/settings.json" \
+        "$CURRENT_HOME/.local/state/noctalia/settings.toml"; do
+        if [[ -e "$existing" || -L "$existing" ]]; then
+            log_info "→ Existing Noctalia profile preserved; choose the bundled wallpaper manually: $wallpaper_path"
+            return 0
+        fi
+    done
+    local escaped_path="${wallpaper_path//\\/\\\\}"
+    escaped_path="${escaped_path//\"/\\\"}"
+    write_file "$config_dir/00-void-desktop-setup.toml" <<EOF_WALLPAPER
+[wallpaper]
+enabled = true
+fill_mode = "crop"
+
+[wallpaper.default]
+path = "$escaped_path"
+EOF_WALLPAPER
+}
+
+is_setup_greeter_config() {
+    local target="$1"
+    [[ -f "$target" && ! -L "$target" ]] || return 1
+    # Only comments (package default) or our old minimal wallpaper configuration.
+    # Any other setting belongs to the administrator and must remain untouched.
+    awk '
+        /^[[:space:]]*(#|$)/ { next }
+        /^[[:space:]]*\[appearance\][[:space:]]*$/ { section = "appearance"; next }
+        /^[[:space:]]*\[appearance.wallpaper\][[:space:]]*$/ { section = "wallpaper"; next }
+        section == "appearance" && /^[[:space:]]*scheme[[:space:]]*=[[:space:]]*"Synced"[[:space:]]*$/ { next }
+        section == "appearance" && /^[[:space:]]*theme_mode[[:space:]]*=[[:space:]]*"dark"[[:space:]]*$/ { next }
+        section == "wallpaper" && /^[[:space:]]*path[[:space:]]*=[[:space:]]*"\/usr\/share\/backgrounds\/void-desktop-setup-default.jpg"[[:space:]]*$/ { next }
+        section == "wallpaper" && /^[[:space:]]*fill_mode[[:space:]]*=[[:space:]]*"(cover|crop)"[[:space:]]*$/ { next }
+        { unexpected = 1 }
+        END { exit unexpected }
+    ' "$target"
+}
+
 configure_noctalia_assets() {
     if ! $WANTS_NOCTALIA || ! $NOCTALIA_READY; then
         return 0
     fi
 
-    log_step "[6/8] Configuring Noctalia Greeter assets / Configurando recursos de Noctalia Greeter..."
+    log_step "[6/8] Configuring Noctalia assets / Configurando recursos de Noctalia..."
 
     local wallpaper_path="$BACKGROUND_DIR/void-desktop-setup-default.jpg"
     if [[ -f "$SCRIPT_DIR/void-desktop-setup-default.jpg" ]]; then
@@ -933,6 +974,12 @@ configure_noctalia_assets() {
         fi
     else
         log_warn "→ Local wallpaper not found; skipping copy / wallpaper local no encontrado"
+    fi
+
+    local wallpaper_available=false
+    if [[ -f "$wallpaper_path" ]] || { $DRY_RUN && [[ -f "$SCRIPT_DIR/void-desktop-setup-default.jpg" ]]; }; then
+        wallpaper_available=true
+        configure_noctalia_wallpaper "$wallpaper_path"
     fi
 
     if ! have_cmd noctalia-greeter-session; then
@@ -981,18 +1028,61 @@ configure_noctalia_assets() {
         run_cmd chown "$greeter_user:" "$NOCTALIA_GREETER_DIR"
         run_cmd chmod 0750 "$NOCTALIA_GREETER_DIR"
     fi
-    if [[ ! -e "$NOCTALIA_GREETER_DIR/greeter.toml" && ! -L "$NOCTALIA_GREETER_DIR/greeter.toml" ]]; then
-        write_file "$NOCTALIA_GREETER_DIR/greeter.toml" <<'EOF_GREETER'
+    local greeter_config="$NOCTALIA_GREETER_DIR/greeter.toml"
+    local write_greeter=false
+    if [[ ! -e "$greeter_config" && ! -L "$greeter_config" ]]; then
+        write_greeter=true
+    elif is_setup_greeter_config "$greeter_config"; then
+        local backup="${greeter_config}.void-desktop-setup.bak"
+        if [[ ! -e "$backup" && ! -L "$backup" ]]; then
+            run_cmd cp -p -- "$greeter_config" "$backup"
+            write_greeter=true
+        else
+            log_warn "→ Existing greeter backup found; review wallpaper configuration manually: $greeter_config"
+        fi
+    else
+        log_info "→ Existing Noctalia Greeter settings preserved: $greeter_config"
+    fi
+    if $write_greeter; then
+        local greeter_content
+        greeter_content="$(cat <<'EOF_GREETER'
 [appearance]
 scheme = "Synced"
 theme_mode = "dark"
 
-[appearance.wallpaper]
-path = "/usr/share/backgrounds/void-desktop-setup-default.jpg"
-fill_mode = "cover"
+# Greeter 1.2.1 requires a complete Synced palette to display a wallpaper.
+[appearance.palette]
+primary = "#fff59b"
+on_primary = "#0e0e43"
+secondary = "#a9aefe"
+on_secondary = "#0e0e43"
+tertiary = "#9BFECE"
+on_tertiary = "#0e0e43"
+error = "#FD4663"
+on_error = "#0e0e43"
+surface = "#070722"
+on_surface = "#f3edf7"
+surface_variant = "#11112d"
+on_surface_variant = "#7c80b4"
+outline = "#21215F"
+shadow = "#070722"
+hover = "#9BFECE"
+on_hover = "#0e0e43"
 EOF_GREETER
-        run_cmd chown "$greeter_user:" "$NOCTALIA_GREETER_DIR/greeter.toml"
-        run_cmd chmod 0640 "$NOCTALIA_GREETER_DIR/greeter.toml"
+        )"
+        if $wallpaper_available; then
+            local escaped_path="${wallpaper_path//\\/\\\\}"
+            escaped_path="${escaped_path//\"/\\\"}"
+            greeter_content+=$'\n\n[appearance.wallpaper]\n'
+            greeter_content+="path = \"$escaped_path\""$'\nfill_mode = "crop"'
+        fi
+        if $DRY_RUN; then
+            echo "[dry-run] write $greeter_config"
+        else
+            printf '%s\n' "$greeter_content" > "$greeter_config"
+        fi
+        run_cmd chown "$greeter_user:" "$greeter_config"
+        run_cmd chmod 0640 "$greeter_config"
     fi
 
     GREETER_CONFIGURED=true

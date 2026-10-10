@@ -457,8 +457,56 @@ assert_contains "$CASE_DIR/sessions/niri.desktop" '^Exec=dbus-run-session /usr/b
 assert_contains "$CASE_DIR/home/.config/niri/config.kdl" '^spawn-at-startup "noctalia" "--daemon"$'
 assert_contains "$CASE_DIR/etc/greetd.toml" '^command = ".*/noctalia-greeter-session"$'
 assert_contains "$CASE_DIR/etc/greetd.toml" '^user = "_greeter"$'
+assert_contains "$CASE_DIR/home/.config/noctalia/00-void-desktop-setup.toml" '^\[wallpaper.default\]$'
+assert_contains "$CASE_DIR/home/.config/noctalia/00-void-desktop-setup.toml" "^path = \"$CASE_DIR/backgrounds/void-desktop-setup-default.jpg\"$"
+assert_contains "$CASE_DIR/noctalia-greeter/greeter.toml" '^\[appearance.palette\]$'
+assert_contains "$CASE_DIR/noctalia-greeter/greeter.toml" '^fill_mode = "crop"$'
+assert_contains "$CASE_DIR/noctalia-greeter/greeter.toml" "^path = \"$CASE_DIR/backgrounds/void-desktop-setup-default.jpg\"$"
 assert_contains "$CASE_DIR/run.log" 'Noctalia Greeter configured'
 assert_link "$CASE_DIR/services/greetd" "$CASE_DIR/sv/greetd"
+new_case old_setup_wallpaper
+cat > "$CASE_DIR/noctalia-greeter/greeter.toml" <<'EOF_OLD_WALLPAPER'
+[appearance]
+scheme = "Synced"
+theme_mode = "dark"
+[appearance.wallpaper]
+path = "/usr/share/backgrounds/void-desktop-setup-default.jpg"
+fill_mode = "cover"
+EOF_OLD_WALLPAPER
+cp "$CASE_DIR/noctalia-greeter/greeter.toml" "$CASE_DIR/original-greeter"
+run_case $'1\ny\nn'
+cmp "$CASE_DIR/original-greeter" "$CASE_DIR/noctalia-greeter/greeter.toml.void-desktop-setup.bak" || fail 'greeter wallpaper backup differs'
+assert_contains "$CASE_DIR/noctalia-greeter/greeter.toml" '^\[appearance.palette\]$'
+snapshot > "$CASE_DIR/before"
+run_case $'1\nn'
+snapshot > "$CASE_DIR/after"
+cmp "$CASE_DIR/before" "$CASE_DIR/after" || fail 'wallpaper repeat changed files'
+new_case packaged_greeter_comments
+printf '# Packaged defaults: no active settings\n' > "$CASE_DIR/noctalia-greeter/greeter.toml"
+run_case $'1\ny\nn'
+assert_contains "$CASE_DIR/noctalia-greeter/greeter.toml" '^\[appearance.palette\]$'
+assert_contains "$CASE_DIR/noctalia-greeter/greeter.toml.void-desktop-setup.bak" '^# Packaged defaults'
+new_case custom_noctalia_config
+mkdir -p "$CASE_DIR/home/.config/noctalia"
+printf '[wallpaper.default]\npath = "/custom/image.jpg"\n' > "$CASE_DIR/home/.config/noctalia/custom.toml"
+run_case $'1\ny\nn'
+assert_absent "$CASE_DIR/home/.config/noctalia/00-void-desktop-setup.toml"
+assert_contains "$CASE_DIR/home/.config/noctalia/custom.toml" '^path = "/custom/image.jpg"$'
+new_case custom_noctalia_state
+mkdir -p "$CASE_DIR/home/.local/state/noctalia"
+printf '[wallpaper.default]\npath = "/custom/state.jpg"\n' > "$CASE_DIR/home/.local/state/noctalia/settings.toml"
+run_case $'1\ny\nn'
+assert_absent "$CASE_DIR/home/.config/noctalia/00-void-desktop-setup.toml"
+assert_contains "$CASE_DIR/home/.local/state/noctalia/settings.toml" '^path = "/custom/state.jpg"$'
+new_case custom_greeter_wallpaper
+printf '[appearance.wallpaper]\npath = "/custom/greeter.jpg"\n' > "$CASE_DIR/noctalia-greeter/greeter.toml"
+run_case $'1\ny\nn'
+assert_contains "$CASE_DIR/noctalia-greeter/greeter.toml" '^path = "/custom/greeter.jpg"$'
+assert_absent "$CASE_DIR/noctalia-greeter/greeter.toml.void-desktop-setup.bak"
+new_case linked_greeter_config
+ln -s /missing/custom-greeter.toml "$CASE_DIR/noctalia-greeter/greeter.toml"
+run_case $'1\ny\nn'
+assert_link "$CASE_DIR/noctalia-greeter/greeter.toml" /missing/custom-greeter.toml
 new_case custom_local_niri_session
 printf '[Desktop Entry]\nName=Niri\nExec=my-niri-session\n' > "$CASE_DIR/sessions/niri.desktop"
 run_case $'1\ny\nn'
