@@ -12,7 +12,7 @@ Minimal, interactive post-installation script for Void Linux with selectable des
 
 - Void Linux, internet access, root execution and a non-root desktop user.
 - An interactive terminal (`/dev/tty`), including for dry runs and confirmations.
-- Current XBPS on older installation images (`sudo xbps-install -Su xbps` if XBPS requests an update).
+- Current XBPS on older installation images (`sudo xbps-install -Su xbps` if XBPS requests an update), then a full system update with `sudo xbps-install -Su` before installing the desktop.
 - Review the script before running it. Configuration and network migrations may need manual reconciliation.
 
 ```bash
@@ -32,6 +32,8 @@ The script reads prompts from `/dev/tty`, including when its source is piped int
 ### Package sources and Noctalia consent
 
 Niri, Sway and KDE (`kde-plasma`) use official Void packages. Noctalia and Noctalia Greeter use `https://repo.voiders.dev`, a **third-party repository not maintained by Void Linux**.
+
+The Noctalia option installs `dejavu-fonts-ttf` so minimal systems can render text. For the stock Niri session, it creates `/usr/local/share/wayland-sessions/niri.desktop` with `dbus-run-session /usr/bin/niri --session`, providing a user D-Bus bus when logging in through the greeter. Existing local entries and customized launch commands are preserved.
 
 Choosing Niri + Noctalia (or all desktops) asks explicitly before adding that repository. Only `y`/`Y` accepts. Declining keeps Niri from the official repositories and skips Noctalia, its greeter and greetd integration. The same prompt is simulated in `--dry-run` without writing a repository file.
 
@@ -172,7 +174,7 @@ Script minimalista e interactivo de post-instalación de Void Linux: Niri + Noct
 
 ### Requisitos e instalación
 
-Necesitas Void Linux, internet, ejecución como root, un usuario de escritorio no-root y terminal interactiva (`/dev/tty`), también para simulaciones y confirmaciones. En imágenes antiguas, actualiza XBPS con `sudo xbps-install -Su xbps` si el gestor lo exige. Revisa el script antes de ejecutarlo.
+Necesitas Void Linux, internet, ejecución como root, un usuario de escritorio no-root y terminal interactiva (`/dev/tty`), también para simulaciones y confirmaciones. En imágenes antiguas, actualiza XBPS con `sudo xbps-install -Su xbps` si el gestor lo exige y después todo el sistema con `sudo xbps-install -Su` antes de instalar el escritorio. Revisa el script antes de ejecutarlo.
 
 ```bash
 git clone https://github.com/SirOtter0/void-desktop-setup.git
@@ -191,6 +193,8 @@ Los prompts se leen de `/dev/tty`, incluso con el código canalizado a Bash. El 
 ### Fuentes y consentimiento para Noctalia
 
 Niri, Sway y KDE (`kde-plasma`) usan paquetes oficiales de Void. Noctalia y Noctalia Greeter utilizan `https://repo.voiders.dev`: **repositorio de terceros no mantenido oficialmente por Void Linux**.
+
+La opción Noctalia instala `dejavu-fonts-ttf` para poder dibujar texto en sistemas mínimos. Para la sesión Niri original, crea `/usr/local/share/wayland-sessions/niri.desktop` con `dbus-run-session /usr/bin/niri --session`, proporcionando un bus D-Bus de usuario al entrar desde el greeter. Se conservan las entradas locales existentes y las órdenes de inicio personalizadas.
 
 Al seleccionar Niri + Noctalia o todos los escritorios, se solicita consentimiento explícito antes de añadirlo. Solo `y`/`Y` acepta. Rechazar mantiene Niri desde los repositorios oficiales y omite Noctalia, su greeter y la integración greetd. `--dry-run` simula la misma decisión sin escribir archivos.
 

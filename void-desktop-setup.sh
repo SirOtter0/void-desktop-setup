@@ -39,6 +39,8 @@ NVIDIA_CONF="${VDS_NVIDIA_MODPROBE_CONF:-/etc/modprobe.d/nvidia-modeset.conf}"
 INTEL_CONF="${VDS_INTEL_PROFILE_CONF:-/etc/profile.d/intel-gpu.sh}"
 EXAMPLES_DIR="${VDS_EXAMPLES_DIR:-/usr/share/examples}"
 APPLICATIONS_DIR="${VDS_APPLICATIONS_DIR:-/usr/share/applications}"
+WAYLAND_SESSIONS_DIR="${VDS_WAYLAND_SESSIONS_DIR:-/usr/local/share/wayland-sessions}"
+SYSTEM_WAYLAND_SESSIONS_DIR="${VDS_SYSTEM_WAYLAND_SESSIONS_DIR:-/usr/share/wayland-sessions}"
 ALSA_CONF_DIR="${VDS_ALSA_CONF_DIR:-/etc/alsa/conf.d}"
 ALSA_SHARE_DIR="${VDS_ALSA_SHARE_DIR:-/usr/share/alsa/alsa.conf.d}"
 PIPEWIRE_SYSTEM_DIR="${VDS_PIPEWIRE_SYSTEM_DIR:-/etc/pipewire}"
@@ -617,7 +619,9 @@ select_shells() {
     if $WANTS_NIRI; then
         install_packages niri
         if configure_voiders_repo; then
-            install_packages greetd noctalia noctalia-greeter
+            # A base Void install may have no text fonts. Pango needs a usable
+            # family for the shell and greeter to render their first frame.
+            install_packages greetd noctalia noctalia-greeter dejavu-fonts-ttf
             NOCTALIA_READY=true
         else
             WANTS_NOCTALIA=false
@@ -995,6 +999,26 @@ EOF_GREETER
     log_ok "→ Noctalia Greeter greetd session configured / sesión greetd configurada"
 }
 
+configure_niri_session() {
+    $WANTS_NIRI && $NOCTALIA_READY || return 0
+    local packaged="$SYSTEM_WAYLAND_SESSIONS_DIR/niri.desktop"
+    local local_entry="$WAYLAND_SESSIONS_DIR/niri.desktop"
+    if [[ -e "$local_entry" || -L "$local_entry" ]]; then
+        log_info "→ Existing local Niri session preserved: $local_entry"
+        return 0
+    fi
+    # Override only the stock command, retaining all other desktop entry fields.
+    # A user bus is not created by elogind or greetd's system service.
+    if [[ ! -r "$packaged" ]] ||
+       [[ "$(grep -c '^Exec=' "$packaged" || true)" != 1 ]] ||
+       ! grep -Eq '^Exec=(/usr/bin/)?niri --session$' "$packaged"; then
+        log_warn "→ Custom or missing Niri session preserved; ensure a user D-Bus session manually"
+        return 0
+    fi
+    write_file "$local_entry" < <(sed -E 's@^Exec=(/usr/bin/)?niri --session$@Exec=dbus-run-session /usr/bin/niri --session@' "$packaged")
+    log_info "→ Niri login session starts with a user D-Bus bus"
+}
+
 append_session_startup() {
     if $DRY_RUN; then
         echo "[dry-run] startup in $1: $2"
@@ -1160,6 +1184,7 @@ main() {
     install_essentials
     configure_network
     configure_noctalia_assets
+    configure_niri_session
     enable_core_services
     configure_shell_files
     print_summary
