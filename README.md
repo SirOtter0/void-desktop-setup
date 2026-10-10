@@ -29,6 +29,8 @@ curl -sL https://raw.githubusercontent.com/SirOtter0/void-desktop-setup/main/voi
 
 The script reads prompts from `/dev/tty`, including when its source is piped into Bash. The desktop user is normally determined from `SUDO_USER` or the login session.
 
+For the bundled wallpaper, use the Git clone installation so `void-desktop-setup-default.jpg` is beside the script. The piped command downloads only the script; without a local or previously installed image, wallpaper setup is skipped.
+
 ### Package sources and Noctalia consent
 
 Niri, Sway and KDE (`kde-plasma`) use official Void packages. Noctalia and Noctalia Greeter use `https://repo.voiders.dev`, a **third-party repository not maintained by Void Linux**.
@@ -121,9 +123,11 @@ Other global services enabled when present are `dbus`, the chosen session manage
 
 ### Configuration preservation and dry run
 
-Existing files, custom symlinks (including dangling links), wallpapers and service entries are preserved. Identical files and expected symlinks are reused. New user configuration directories/files belong to the desktop user; existing trees are not recursively chowned. Installed packages are skipped. The sole exception is greetd's recognized, unmodified `agreety --cmd /bin/sh` default: when Noctalia is selected, it is backed up once as `config.toml.void-desktop-setup.bak` and replaced with a `noctalia-greeter-session` entry. A custom greetd file or an existing backup prevents automatic migration, with a warning and no new greetd service activation.
+Existing files, custom symlinks (including dangling links), wallpapers and service entries are preserved. Identical files and expected symlinks are reused. New user configuration directories/files belong to the desktop user; existing trees are not recursively chowned. Installed packages are skipped. One backed-up migration is greetd's recognized, unmodified `agreety --cmd /bin/sh` default: when Noctalia is selected, it is backed up once as `config.toml.void-desktop-setup.bak` and replaced with a `noctalia-greeter-session` entry. A custom greetd file or an existing backup prevents automatic migration, with a warning and no new greetd service activation.
 
 The minimal new Niri configuration retains keyboard layout `es` and the Kitty/Fuzzel shortcuts. Accepted Noctalia starts with `noctalia --daemon` when its binary is available. The greeter uses the installed `noctalia-greeter-session` wrapper and an existing `_greeter` or `greeter` account. Its state directory and new `greeter.toml` are created with that account's ownership. Existing custom greeter settings remain untouched.
+
+For a fresh Noctalia profile, the bundled JPEG is installed in `/usr/share/backgrounds/` and selected through `~/.config/noctalia/00-void-desktop-setup.toml`. Existing TOML, legacy `settings.json`, or GUI-managed `~/.local/state/noctalia/settings.toml` prevent profile seeding and are preserved. The greeter receives the same image with `fill_mode = "crop"` and a complete Synced palette, required by Greeter 1.2.1. A comment-only packaged greeter file or the script's old minimal wallpaper settings can be upgraded once, with a `greeter.toml.void-desktop-setup.bak` backup; other settings and symlinks are preserved.
 
 ```bash
 sudo ./void-desktop-setup.sh --dry-run
@@ -141,7 +145,7 @@ shellcheck void-desktop-setup.sh tests/mock-smoke-tests.sh  # when installed
 
 The mock harness runs package, group and service commands as mocks, and real file operations only in temporary directories. Apply runs source the actual script and replace platform preflight checks; direct and stdin-fed dry runs exercise its normal entrypoint, including the executable bit and piped installation path. Scenarios cover Intel/AMD, multiple NVIDIA generations, unknown/mixed GPUs, each desktop, audio/Bluetooth/Vulkan, session alternatives, network consent/conflicts/failure, Noctalia consent/reuse, custom files/links, repeated execution and dry-run snapshots. Input paths have timeouts so missing input cannot hang the suite.
 
-The Niri + Noctalia path was installed in a Void live QEMU VM on 2026-10-04; Niri's generated configuration passed `niri validate`. Graphical login and hardware-dependent behavior remain to be checked:
+The Niri + Noctalia path was installed in a Void live QEMU VM on 2026-10-04. On 2026-10-10, graphical greeter login, a Niri session with a user D-Bus bus, Noctalia, Kitty, and the bundled wallpaper in both the greeter and desktop were verified with KVM and VirtIO OpenGL. Generated configuration passed `niri validate` and `noctalia config validate`. Remaining checks include:
 
 - XBPS availability for the target architecture/libc; NVIDIA DKMS against the actual kernel/headers, DRM/KMS and RTX 4060 Ti login. NVIDIA's nonfree packages are architecture/libc limited.
 - Niri/Sway/Plasma login, seat permissions, D-Bus activation, runtime directories and portal file dialogs/screensharing.
@@ -189,6 +193,8 @@ curl -sL https://raw.githubusercontent.com/SirOtter0/void-desktop-setup/main/voi
 ```
 
 Los prompts se leen de `/dev/tty`, incluso con el código canalizado a Bash. El usuario se determina normalmente mediante `SUDO_USER` o la sesión de login.
+
+Para incluir el fondo, instala mediante Git y mantén `void-desktop-setup-default.jpg` junto al script. La orden canalizada solo descarga el script; si la imagen no está disponible localmente ni instalada previamente, se omite la configuración del fondo.
 
 ### Fuentes y consentimiento para Noctalia
 
@@ -282,9 +288,11 @@ Los demás servicios globales son `dbus`, el gestor de sesiones elegido, `blueto
 
 ### Preservación, idempotencia y simulación
 
-Se conservan archivos, enlaces personalizados (incluidos los rotos), wallpapers y entradas de servicio. Los archivos idénticos y enlaces esperados se reutilizan. Los nuevos archivos/directorios de usuario pertenecen al usuario de escritorio; no se hace `chown` recursivo de árboles existentes. Se omiten paquetes ya instalados. La única excepción es la configuración predeterminada reconocible de greetd (`agreety --cmd /bin/sh`): al elegir Noctalia, se guarda una copia única `config.toml.void-desktop-setup.bak` y se configura `noctalia-greeter-session`. Una configuración personalizada o una copia ya existente impiden la migración automática; se avisa y no se activa un servicio greetd nuevo.
+Se conservan archivos, enlaces personalizados (incluidos los rotos), wallpapers y entradas de servicio. Los archivos idénticos y enlaces esperados se reutilizan. Los nuevos archivos/directorios de usuario pertenecen al usuario de escritorio; no se hace `chown` recursivo de árboles existentes. Se omiten paquetes ya instalados. Una migración con copia de respaldo es la configuración predeterminada reconocible de greetd (`agreety --cmd /bin/sh`): al elegir Noctalia, se guarda una copia única `config.toml.void-desktop-setup.bak` y se configura `noctalia-greeter-session`. Una configuración personalizada o una copia ya existente impiden la migración automática; se avisa y no se activa un servicio greetd nuevo.
 
 La configuración mínima nueva de Niri mantiene teclado `es` y atajos Kitty/Fuzzel. Al aceptar Noctalia, se arranca con `noctalia --daemon` si existe el binario. El greeter utiliza `noctalia-greeter-session` y una cuenta `_greeter` o `greeter` existente. El directorio de estado y el nuevo `greeter.toml` se crean con su propietario; las configuraciones personalizadas se conservan.
+
+Para un perfil nuevo de Noctalia, se instala el JPEG incluido en `/usr/share/backgrounds/` y se selecciona mediante `~/.config/noctalia/00-void-desktop-setup.toml`. Si ya hay archivos TOML, el antiguo `settings.json` o ajustes de la interfaz en `~/.local/state/noctalia/settings.toml`, se conservan y no se añade esa configuración. El greeter recibe la misma imagen con `fill_mode = "crop"` y una paleta Synced completa, necesaria en Greeter 1.2.1. Un archivo del paquete con solo comentarios o la configuración mínima del fondo generada por versiones anteriores del script se actualizan una vez, con copia `greeter.toml.void-desktop-setup.bak`; otras configuraciones y enlaces se conservan.
 
 ```bash
 sudo ./void-desktop-setup.sh --dry-run
@@ -302,7 +310,7 @@ shellcheck void-desktop-setup.sh tests/mock-smoke-tests.sh  # si está instalado
 
 El harness simula paquetes, grupos y servicios; las operaciones reales de archivos quedan en directorios temporales. Las ejecuciones de aplicación cargan el script real y sustituyen las comprobaciones de plataforma; los dry runs directos y por entrada estándar prueban la entrada normal, incluido el permiso de ejecución y la instalación canalizada. Se cubren Intel/AMD, generaciones NVIDIA, GPU desconocidas/mezcladas, cada escritorio, audio/Bluetooth/Vulkan, alternativas de sesión, red/conflictos/consentimiento/fallos, Noctalia, configuraciones/enlaces personalizados, segunda ejecución y snapshots de dry run. Las entradas tienen timeout para evitar bloqueos.
 
-La ruta Niri + Noctalia se instaló en una VM live de Void con QEMU el 2026-10-04 y la configuración generada pasó `niri validate`. Aún hay que comprobar el inicio gráfico y el comportamiento dependiente del hardware:
+La ruta Niri + Noctalia se instaló en una VM live de Void con QEMU el 2026-10-04. El 2026-10-10 se verificaron el acceso gráfico, la sesión Niri con D-Bus de usuario, Noctalia, Kitty y el fondo incluido tanto en el greeter como en el escritorio, con KVM y VirtIO OpenGL. La configuración generada pasó `niri validate` y `noctalia config validate`. Queda por comprobar:
 
 - Paquetes XBPS para arquitectura/libc objetivo; DKMS NVIDIA con kernel/headers reales, DRM/KMS y login en RTX 4060 Ti. Los paquetes NVIDIA nonfree tienen restricciones de arquitectura/libc.
 - Login Niri/Sway/Plasma, permisos del seat, D-Bus, runtime y diálogos/screencasting de portales.
