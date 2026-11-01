@@ -38,9 +38,13 @@ new_case() {
     FAIL_SV=0
     FAIL_SV_SVC=""
     FAIL_NM_LINK=0
+    FAIL_REPO_SYNC=0
     cat > "$CASE_DIR/bin/xbps-install" <<'EOS'
 #!/usr/bin/env bash
 printf 'xbps-install %s\n' "$*" >> "$MOCK_ROOT/actions"
+if [[ "$*" == -S && "${MOCK_FAIL_REPO_SYNC:-0}" == 1 ]]; then
+    exit 1
+fi
 for pkg in "$@"; do
     [[ "$pkg" == -* ]] && continue
     grep -qxF "$pkg" "$MOCK_ROOT/packages" || echo "$pkg" >> "$MOCK_ROOT/packages"
@@ -139,10 +143,11 @@ run_case() {
     env PATH="$CASE_DIR/bin:$PATH" TARGET_SCRIPT="$TARGET_SCRIPT" \
         MOCK_ROOT="$CASE_DIR" MOCK_LSPCI_OUTPUT="$GPU_OUTPUT" MOCK_MISSING_CMDS="$MISSING_CMDS" \
         MOCK_UNAVAILABLE_PACKAGE="$UNAVAILABLE_PACKAGE" MOCK_FAIL_SV="$FAIL_SV" MOCK_FAIL_SV_SVC="$FAIL_SV_SVC" MOCK_FAIL_NM_LINK="$FAIL_NM_LINK" \
+        MOCK_FAIL_REPO_SYNC="$FAIL_REPO_SYNC" \
         VDS_CURRENT_USER=tester VDS_CURRENT_HOME="$CASE_DIR/home" VDS_INPUT_FILE="$CASE_DIR/input" \
         VDS_ALLOW_NON_ROOT=1 VDS_DRY_RUN_EXEC=1 \
         VDS_SV_DIR="$CASE_DIR/sv" VDS_SERVICE_DIR="$CASE_DIR/services" \
-        VDS_XBPS_REPO_CONF="$CASE_DIR/etc/voiders.conf" VDS_XBPS_SYSTEM_REPO_DIR="$CASE_DIR/system-repos" \
+        VDS_XBPS_REPO_CONF="$CASE_DIR/etc/universalrepository.conf" VDS_XBPS_SYSTEM_REPO_DIR="$CASE_DIR/system-repos" \
         VDS_NVIDIA_MODPROBE_CONF="$CASE_DIR/etc/nvidia.conf" VDS_INTEL_PROFILE_CONF="$CASE_DIR/etc/intel.sh" \
         VDS_GREETD_CONF="$CASE_DIR/etc/greetd.toml" VDS_BACKGROUND_DIR="$CASE_DIR/backgrounds" \
         VDS_WAYLAND_SESSIONS_DIR="$CASE_DIR/sessions" VDS_SYSTEM_WAYLAND_SESSIONS_DIR="$CASE_DIR/system-sessions" \
@@ -244,7 +249,7 @@ assert_contains "$CASE_DIR/home/.config/xdg-desktop-portal/niri-portals.conf" 'F
 assert_contains "$CASE_DIR/home/.config/xdg-desktop-portal/niri-portals.conf" 'Secret=gnome-keyring;'
 assert_package gnome-keyring
 assert_link "$CASE_DIR/home/.config/autostart/pipewire.desktop" "$CASE_DIR/applications/pipewire.desktop"
-assert_contains "$CASE_DIR/etc/voiders.conf" '^repository=https://repo.voiders.dev$'
+assert_contains "$CASE_DIR/etc/universalrepository.conf" '^repository=https://universalrepo.pages.dev/void$'
 assert_audio
 snapshot > "$CASE_DIR/before"
 run_case $'4\nn' # Existing repo must not prompt for approval again.
@@ -445,7 +450,7 @@ run_case $'1\nn\nn'
 assert_package niri
 assert_no_package noctalia
 assert_no_package greetd
-assert_absent "$CASE_DIR/etc/voiders.conf"
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
 assert_contains "$CASE_DIR/run.log" 'NOT maintained by Void Linux'
 assert_contains "$CASE_DIR/home/.config/niri/config.kdl" 'spawn-at-startup "pipewire"'
 assert_not_contains "$CASE_DIR/home/.config/niri/config.kdl" 'spawn-at-startup "noctalia"'
@@ -543,16 +548,61 @@ assert_contains "$CASE_DIR/run.log" 'greeter integration requires manual validat
 assert_absent "$CASE_DIR/services/greetd"
 assert_absent "$CASE_DIR/etc/greetd.toml.void-desktop-setup.bak"
 new_case noctalia_existing_repo
-printf '# existing\nrepository=https://repo.voiders.dev\n' > "$CASE_DIR/etc/other.conf"
+printf '# existing\nrepository=https://universalrepo.pages.dev/void\n' > "$CASE_DIR/etc/other.conf"
 run_case $'1\nn'
 assert_package noctalia
-assert_absent "$CASE_DIR/etc/voiders.conf"
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
 assert_not_contains "$CASE_DIR/run.log" 'Add this third-party repository'
 new_case noctalia_custom_repo_target
-printf '# custom repository\n' > "$CASE_DIR/etc/voiders.conf"
+printf '# custom repository\n' > "$CASE_DIR/etc/universalrepository.conf"
 run_case $'1\ny\nn'
-assert_contains "$CASE_DIR/etc/voiders.conf" '^# custom repository$'
+assert_contains "$CASE_DIR/etc/universalrepository.conf" '^# custom repository$'
 assert_no_package noctalia
+
+new_case noctalia_legacy_repo
+printf 'repository=https://repo.voiders.dev\n' > "$CASE_DIR/etc/noctalia.conf"
+run_case $'1\nn'
+assert_no_package noctalia
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
+assert_contains "$CASE_DIR/etc/noctalia.conf" '^repository=https://repo.voiders.dev$'
+assert_contains "$CASE_DIR/run.log" 'Legacy repo.voiders.dev entry found'
+assert_not_contains "$CASE_DIR/run.log" 'Add this third-party repository'
+
+new_case noctalia_repo_sync_failure
+FAIL_REPO_SYNC=1
+run_case $'1\ny\nn'
+assert_no_package noctalia
+assert_no_package noctalia-greeter
+assert_absent "$CASE_DIR/services/greetd"
+
+new_case noctalia_existing_repo_sync_failure
+FAIL_REPO_SYNC=1
+printf 'repository=https://universalrepo.pages.dev/void\n' > "$CASE_DIR/etc/other.conf"
+run_case $'1\nn'
+assert_no_package noctalia
+assert_no_package noctalia-greeter
+
+new_case noctalia_both_repos
+printf 'repository=https://universalrepo.pages.dev/void\n' > "$CASE_DIR/etc/aaa.conf"
+printf 'repository=https://repo.voiders.dev\n' > "$CASE_DIR/etc/zzz.conf"
+run_case $'1\nn'
+assert_no_package noctalia
+assert_contains "$CASE_DIR/run.log" 'Legacy repo.voiders.dev entry found'
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
+
+new_case noctalia_existing_repo_slash
+printf 'repository=https://universalrepo.pages.dev/void/ # existing\n' > "$CASE_DIR/etc/other.conf"
+run_case $'1\nn'
+assert_package noctalia
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
+assert_not_contains "$CASE_DIR/run.log" 'Add this third-party repository'
+
+new_case noctalia_masked_legacy_repo
+printf 'repository=https://repo.voiders.dev\n' > "$CASE_DIR/system-repos/community.conf"
+printf '# disabled\n' > "$CASE_DIR/etc/community.conf"
+run_case $'1\ny\nn'
+assert_package noctalia
+assert_contains "$CASE_DIR/etc/universalrepository.conf" '^repository=https://universalrepo.pages.dev/void$'
 
 new_case preserve_custom
 mkdir -p "$CASE_DIR/home/.config"/{niri,sway,xdg-desktop-portal,autostart,pipewire/pipewire.conf.d}
@@ -602,9 +652,9 @@ for decision in y n; do
     [[ ! -s "$CASE_DIR/actions" ]] || fail 'dry-run executed a mutating mock'
     assert_contains "$CASE_DIR/run.log" '\[dry-run\] sv down'
     if [[ "$decision" == y ]]; then
-        assert_contains "$CASE_DIR/run.log" '\[dry-run\] write .*/voiders.conf'
+        assert_contains "$CASE_DIR/run.log" '\[dry-run\] write .*/universalrepository.conf'
     else
-        assert_not_contains "$CASE_DIR/run.log" '\[dry-run\] write .*/voiders.conf'
+        assert_not_contains "$CASE_DIR/run.log" '\[dry-run\] write .*/universalrepository.conf'
     fi
 done
 
@@ -639,10 +689,10 @@ assert_absent "$CASE_DIR/etc/greetd.toml"
 assert_contains "$CASE_DIR/run.log" 'noctalia-greeter-session not found'
 assert_absent "$CASE_DIR/services/greetd"
 new_case repo_system_existing
-printf 'repository=https://repo.voiders.dev\n' > "$CASE_DIR/system-repos/community.conf"
+printf 'repository=https://universalrepo.pages.dev/void\n' > "$CASE_DIR/system-repos/community.conf"
 run_case $'1\nn'
 assert_package noctalia
-assert_absent "$CASE_DIR/etc/voiders.conf"
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
 new_case noop_egl_seat
 ln -s "$CASE_DIR/sv/elogind" "$CASE_DIR/services/elogind"
 ln -s "$CASE_DIR/sv/seatd" "$CASE_DIR/services/seatd"
@@ -652,12 +702,12 @@ assert_package elogind
 assert_contains "$CASE_DIR/run.log" 'Existing seatd preserved'
 
 new_case masked_system_repo
-printf 'repository=https://repo.voiders.dev\n' > "$CASE_DIR/system-repos/community.conf"
+printf 'repository=https://universalrepo.pages.dev/void\n' > "$CASE_DIR/system-repos/community.conf"
 printf '# repository disabled\n' > "$CASE_DIR/etc/community.conf"
 run_case $'1\nn\nn'
 assert_no_package noctalia
 assert_contains "$CASE_DIR/run.log" 'Add this third-party repository'
-assert_absent "$CASE_DIR/etc/voiders.conf"
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
 new_case preserve_live_config_link
 GPU_OUTPUT='01:00.0 VGA compatible controller: NVIDIA Corporation AD106 [GeForce RTX 4060 Ti]'
 printf 'options nvidia-drm modeset=0\n' > "$CASE_DIR/etc/custom-nvidia.conf"
@@ -814,7 +864,7 @@ new_case invalid_desktop
 run_case $'9' apply 1
 new_case repo_eof
 run_case $'1' apply 1
-assert_absent "$CASE_DIR/etc/voiders.conf"
+assert_absent "$CASE_DIR/etc/universalrepository.conf"
 new_case migration_eof
 ln -s "$CASE_DIR/sv/dhcpcd" "$CASE_DIR/services/dhcpcd"
 run_case $'2\ny' apply 1

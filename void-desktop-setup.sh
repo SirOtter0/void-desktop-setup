@@ -34,7 +34,7 @@ TTY_INPUT="${VDS_INPUT_FILE:-/dev/tty}"
 TTY_FD=""
 SV_DIR="${VDS_SV_DIR:-/etc/sv}"
 SERVICE_DIR="${VDS_SERVICE_DIR:-/var/service}"
-VOIDERS_REPO_CONF="${VDS_XBPS_REPO_CONF:-/etc/xbps.d/10-voiders-community.conf}"
+NOCTALIA_REPO_CONF="${VDS_XBPS_REPO_CONF:-/etc/xbps.d/10-universalrepository.conf}"
 NVIDIA_CONF="${VDS_NVIDIA_MODPROBE_CONF:-/etc/modprobe.d/nvidia-modeset.conf}"
 INTEL_CONF="${VDS_INTEL_PROFILE_CONF:-/etc/profile.d/intel-gpu.sh}"
 EXAMPLES_DIR="${VDS_EXAMPLES_DIR:-/usr/share/examples}"
@@ -285,21 +285,31 @@ resolve_desktop_user() {
     log_ok "Home detected / Home detectado: $CURRENT_HOME"
 }
 
-configure_voiders_repo() {
-    local conf local_repo_dir
-    local_repo_dir="$(dirname "$VOIDERS_REPO_CONF")"
+configure_noctalia_repo() {
+    local conf local_repo_dir existing_repo=""
+    local_repo_dir="$(dirname "$NOCTALIA_REPO_CONF")"
     for conf in "$local_repo_dir"/*.conf "$XBPS_SYSTEM_REPO_DIR"/*.conf; do
         # XBPS ignores a system config when /etc/xbps.d contains the same filename.
         if [[ "$conf" == "$XBPS_SYSTEM_REPO_DIR/"* && ( -e "$local_repo_dir/${conf##*/}" || -L "$local_repo_dir/${conf##*/}" ) ]]; then
             continue
         fi
         if [[ -f "$conf" ]] && grep -Eq '^[[:space:]]*repository=https://repo\.voiders\.dev(/[^[:space:]#]*)?([[:space:]]*(#.*)?)?$' "$conf"; then
-            log_info "→ repo.voiders.dev already configured / ya configurado: $conf"
-            return 0
+            log_warn "→ Legacy repo.voiders.dev entry found / repositorio antiguo detectado: $conf"
+            log_warn "→ Migrate the repository manually before installing Noctalia / migra el repositorio antes de instalar Noctalia"
+            return 1
+        fi
+        if [[ -f "$conf" ]] && grep -Eq '^[[:space:]]*repository=https://universalrepo\.pages\.dev/void/?([[:space:]]*(#.*)?)?$' "$conf"; then
+            existing_repo="$conf"
         fi
     done
-    log_warn "Noctalia uses repo.voiders.dev: a third-party repository NOT maintained by Void Linux."
-    log_warn "Noctalia usa repo.voiders.dev: repositorio de terceros NO mantenido oficialmente por Void Linux."
+    if [[ -n "$existing_repo" ]]; then
+        log_info "→ UniversalRepository already configured / ya configurado: $existing_repo"
+        # Let XBPS request key approval on the tty before package installs use -y.
+        run_cmd xbps-install -S <&"$TTY_FD"
+        return $?
+    fi
+    log_warn "Noctalia uses UniversalRepository (https://universalrepo.pages.dev/void): a third-party repository NOT maintained by Void Linux."
+    log_warn "Noctalia usa UniversalRepository (https://universalrepo.pages.dev/void): repositorio de terceros NO mantenido oficialmente por Void Linux."
     echo "  Add this third-party repository? / ¿Añadir este repositorio de terceros? (y/N):"
     local accept_repo
     read_line_from_tty accept_repo
@@ -307,13 +317,14 @@ configure_voiders_repo() {
         log_warn "→ Noctalia skipped / omitido; Niri will use official Void packages"
         return 1
     fi
-    if [[ -e "$VOIDERS_REPO_CONF" || -L "$VOIDERS_REPO_CONF" ]]; then
-        log_warn "→ Preserving $VOIDERS_REPO_CONF; configure the repository manually"
+    if [[ -e "$NOCTALIA_REPO_CONF" || -L "$NOCTALIA_REPO_CONF" ]]; then
+        log_warn "→ Preserving $NOCTALIA_REPO_CONF; configure the repository manually"
         return 1
     fi
-    write_file "$VOIDERS_REPO_CONF" <<'EOF_REPO'
-repository=https://repo.voiders.dev
+    write_file "$NOCTALIA_REPO_CONF" <<'EOF_REPO' || return 1
+repository=https://universalrepo.pages.dev/void
 EOF_REPO
+    run_cmd xbps-install -S <&"$TTY_FD"
 }
 
 setup_preflight() {
@@ -566,7 +577,7 @@ EOF_INTEL_MODERN
 select_shells() {
     log_step "[3/8] Select shells to install / Selecciona shells a instalar:"
     echo ""
-    echo "  1) Niri + Noctalia (requires repo.voiders.dev)"
+    echo "  1) Niri + Noctalia (requires UniversalRepository)"
     echo "  2) Sway"
     echo "  3) KDE Plasma (Wayland)"
     echo "  4) Multiple / Múltiples (install all)"
@@ -618,7 +629,7 @@ select_shells() {
     configure_session_management
     if $WANTS_NIRI; then
         install_packages niri
-        if configure_voiders_repo; then
+        if configure_noctalia_repo; then
             # A base Void install may have no text fonts. Pango needs a usable
             # family for the shell and greeter to render their first frame.
             install_packages greetd noctalia noctalia-greeter dejavu-fonts-ttf
