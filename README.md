@@ -33,13 +33,15 @@ For the bundled wallpaper, use the Git clone installation so `void-desktop-setup
 
 ### Package sources and Noctalia consent
 
-Niri, Sway and KDE (`kde-plasma`) use official Void packages. Noctalia and Noctalia Greeter use `https://repo.voiders.dev`, a **third-party repository not maintained by Void Linux**.
+Niri, Sway and KDE (`kde-plasma`) use official Void packages. Noctalia and Noctalia Greeter use `https://universalrepo.pages.dev/void`, a **third-party repository not maintained by Void Linux**.
 
 The Noctalia option installs `dejavu-fonts-ttf` so minimal systems can render text. For the stock Niri session, it creates `/usr/local/share/wayland-sessions/niri.desktop` with `dbus-run-session /usr/bin/niri --session`, providing a user D-Bus bus when logging in through the greeter. Existing local entries and customized launch commands are preserved.
 
-Choosing Niri + Noctalia (or all desktops) asks explicitly before adding that repository. Only `y`/`Y` accepts. Declining keeps Niri from the official repositories and skips Noctalia, its greeter and greetd integration. The same prompt is simulated in `--dry-run` without writing a repository file.
+Choosing Niri + Noctalia (or all desktops) asks explicitly before adding that repository. Only `y`/`Y` accepts. Before installing Noctalia, a separate `xbps-install -S` reads key approval from the interactive terminal without `-y`; a failure skips Noctalia. Declining keeps Niri from the official repositories and skips Noctalia, its greeter and greetd integration. The same prompt is simulated in `--dry-run` without writing a repository file.
 
-An existing active `repository=https://repo.voiders.dev` entry, including entries with a repository subpath, is reused from `/etc/xbps.d/*.conf` or `/usr/share/xbps.d/*.conf`; no duplicate or new consent prompt is added. System files masked by an `/etc/xbps.d` file of the same name are ignored, as in XBPS. A different existing file at `/etc/xbps.d/10-voiders-community.conf` is preserved, and adding Noctalia is skipped with a warning. XBPS remains responsible for repository signature checks.
+An existing active `repository=https://universalrepo.pages.dev/void` entry (with an optional trailing slash) is reused from `/etc/xbps.d/*.conf` or `/usr/share/xbps.d/*.conf`; no duplicate or new consent prompt is added. System files masked by an `/etc/xbps.d` file of the same name are ignored, as in XBPS. A different existing file at `/etc/xbps.d/10-universalrepository.conf` is preserved, and adding Noctalia is skipped with a warning. XBPS remains responsible for repository signature checks and key import prompts.
+
+This URL follows the [current Noctalia installation documentation](https://docs.noctalia.dev/noctalia/getting-started/installation/#void). If an active `repo.voiders.dev` entry is found, the script skips Noctalia with a migration warning, even when the new repository is also present. It does not delete or rewrite repository configuration. Back up and migrate the old entry manually before rerunning; changing repositories does not require updating installed packages.
 
 ### GPU drivers and Vulkan
 
@@ -198,13 +200,15 @@ Para incluir el fondo, instala mediante Git y mantén `void-desktop-setup-defaul
 
 ### Fuentes y consentimiento para Noctalia
 
-Niri, Sway y KDE (`kde-plasma`) usan paquetes oficiales de Void. Noctalia y Noctalia Greeter utilizan `https://repo.voiders.dev`: **repositorio de terceros no mantenido oficialmente por Void Linux**.
+Niri, Sway y KDE (`kde-plasma`) usan paquetes oficiales de Void. Noctalia y Noctalia Greeter utilizan `https://universalrepo.pages.dev/void`: **repositorio de terceros no mantenido oficialmente por Void Linux**.
 
 La opción Noctalia instala `dejavu-fonts-ttf` para poder dibujar texto en sistemas mínimos. Para la sesión Niri original, crea `/usr/local/share/wayland-sessions/niri.desktop` con `dbus-run-session /usr/bin/niri --session`, proporcionando un bus D-Bus de usuario al entrar desde el greeter. Se conservan las entradas locales existentes y las órdenes de inicio personalizadas.
 
-Al seleccionar Niri + Noctalia o todos los escritorios, se solicita consentimiento explícito antes de añadirlo. Solo `y`/`Y` acepta. Rechazar mantiene Niri desde los repositorios oficiales y omite Noctalia, su greeter y la integración greetd. `--dry-run` simula la misma decisión sin escribir archivos.
+Al seleccionar Niri + Noctalia o todos los escritorios, se solicita consentimiento explícito antes de añadirlo. Solo `y`/`Y` acepta. Antes de instalar Noctalia, un `xbps-install -S` separado lee la aprobación de claves desde el terminal interactivo sin `-y`; si falla, se omite Noctalia. Rechazar mantiene Niri desde los repositorios oficiales y omite Noctalia, su greeter y la integración greetd. `--dry-run` simula la misma decisión sin escribir archivos.
 
-Si ya existe una entrada activa `repository=https://repo.voiders.dev` (también con subruta) en `/etc/xbps.d/*.conf` o `/usr/share/xbps.d/*.conf`, se reutiliza sin duplicarla ni repetir la confirmación. Se ignoran archivos del sistema anulados por un archivo con el mismo nombre en `/etc/xbps.d`, como hace XBPS. Un archivo distinto existente en `/etc/xbps.d/10-voiders-community.conf` se conserva: se avisa y se omite Noctalia. XBPS sigue comprobando las firmas del repositorio.
+Si ya existe una entrada activa `repository=https://universalrepo.pages.dev/void` (con barra final opcional) en `/etc/xbps.d/*.conf` o `/usr/share/xbps.d/*.conf`, se reutiliza sin duplicarla ni repetir la confirmación. Se ignoran archivos del sistema anulados por un archivo con el mismo nombre en `/etc/xbps.d`, como hace XBPS. Un archivo distinto existente en `/etc/xbps.d/10-universalrepository.conf` se conserva: se avisa y se omite Noctalia. XBPS sigue comprobando las firmas y solicitando la importación de claves.
+
+Esta URL sigue la [documentación actual de instalación de Noctalia](https://docs.noctalia.dev/noctalia/getting-started/installation/#void). Si se encuentra una entrada activa de `repo.voiders.dev`, el script omite Noctalia y solicita migrarla, incluso si también está presente el repositorio nuevo. No borra ni reescribe configuraciones de repositorios. Haz una copia y migra la entrada antigua manualmente antes de repetir la ejecución; cambiar de repositorio no requiere actualizar paquetes instalados.
 
 ### Drivers y Vulkan
 
